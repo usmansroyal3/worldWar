@@ -1,0 +1,207 @@
+import {
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  type Unsubscribe,
+} from 'firebase/firestore';
+import { nanoid } from 'nanoid';
+import { db } from './config';
+import type { AllianceState, NewsItem, PlayerState, RoomState } from '@/types';
+import { emptyArmy, startingArmy, startingInnovation, startingMoney, startingMorale } from '@/game/army';
+import { rollPerks } from '@/data/perks';
+
+const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+function genRoomCode(): string {
+  let out = '';
+  for (let i = 0; i < 5; i++) {
+    out += ROOM_CODE_ALPHABET[Math.floor(Math.random() * ROOM_CODE_ALPHABET.length)];
+  }
+  return out;
+}
+
+function requireDb() {
+  if (!db) throw new Error('Firebase not configured. Set VITE_FIREBASE_* env vars.');
+  return db;
+}
+
+export function blankPlayer(uid: string, name: string): PlayerState {
+  const perks = rollPerks(hashSeed(uid), 2);
+  return {
+    uid,
+    name,
+    joinedAt: Date.now(),
+    ready: false,
+    countryCode: null,
+    allianceId: null,
+    perks,
+    morale: startingMorale(perks),
+    reputation: 50,
+    money: startingMoney(perks),
+    innovation: startingInnovation(perks),
+    army: { ...emptyArmy(), ...startingArmy(perks) },
+    capital: { hp: 10000, maxHp: 10000 },
+    territories: [],
+    daily: { speechUsed: false, lastResetDay: 1 },
+  };
+}
+
+function hashSeed(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+export async function createRoom(uid: string, displayName: string, prepDays = 7): Promise<string> {
+  const db = requireDb();
+  const code = genRoomCode();
+  const ref = doc(db, 'rooms', code);
+  const room: RoomState = {
+    id: code,
+    adminId: uid,
+    createdAt: Date.now(),
+    status: 'lobby',
+    prepDays: Math.max(7, Math.floor(prepDays)),
+    warDays: 7,
+    startedAt: null,
+    dayLengthMs: 24 * 60 * 60 * 1000,
+    players: { [uid]: blankPlayer(uid, displayName) },
+    alliances: {},
+    npc: {},
+  };
+  await setDoc(ref, { ...room, createdAt: serverTimestamp() });
+  return code;
+}
+
+export async function joinRoom(code: string, uid: string, displayName: string): Promise<void> {
+  const db = requireDb();
+  const ref = doc(db, 'rooms', code.toUpperCase());
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error(`Room ${code} not found.`);
+  const room = snap.data() as RoomState;
+  if (room.status !== 'lobby') throw new Error('Game already started.');
+  const playerCount = Object.keys(room.players).length;
+  if (room.players[uid]) return; // already in
+  if (playerCount >= 6) throw new Error('Room is full (6 players max).');
+  await updateDoc(ref, { [`players.${uid}`]: blankPlayer(uid, displayName) });
+}
+
+export function watchRoom(code: string, cb: (room: RoomState | null) => void): Unsubscribe {
+  const db = requireDb();
+  const ref = doc(db, 'rooms', code.toUpperCase());
+  return onSnapshot(ref, (snap) => {
+    if (!snap.exists()) return cb(null);
+    cb(snap.data() as RoomState);
+  });
+}
+
+export async function patchPlayer(code: string, uid: string, patch: Partial<PlayerState>): Promise<void> {
+  const db = requireDb();
+  const ref = doc(db, 'rooms', code.toUpperCase());
+  const updates: Record<string, unknown> = {};
+  Object.entries(patch).forEach(([k, v]) => {
+    updates[`players.${uid}.${k}`] = v;
+  });
+  await updateDoc(ref, updates);
+}
+
+export async function updateRoom(code: string, patch: Partial<RoomState>): Promise<void> {
+  const db = requireDb();
+  const ref = doc(db, 'rooms', code.toUpperCase());
+  await updateDoc(ref, patch as Record<string, unknown>);
+}
+
+export async function startGame(code: string): Promise<void> {
+  const db = requireDb();
+  const ref = doc(db, 'rooms', code.toUpperCase());
+  await updateDoc(ref, {
+    status: 'preparation',
+    startedAt: serverTimestamp(),
+  });
+}
+
+export async function createAlliance(code: string, founderId: string, name: string): Promise<string> {
+  const id = nanoid(6);
+  const a: AllianceState = { id, name, founderId, memberIds: [founderId] };
+  await updateRoom(code, { [`alliances.${id}`]: a } as unknown as Partial<RoomState>);
+  await patchPlayer(code, founderId, { allianceId: id });
+  return id;
+}
+
+export async function joinAlliance(code: string, allianceId: string, uid: string): Promise<void> {
+  const db = requireDb();
+  const ref = doc(db, 'rooms', code.toUpperCase());
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error('Room missing');
+  const room = snap.data() as RoomState;
+  const a = room.alliances[allianceId];
+  if (!a) throw new Error('Alliance missing');
+  if (a.memberIds.includes(uid)) return;
+  const next = { ...a, memberIds: [...a.memberIds, uid] };
+  await updateDoc(ref, {
+    [`alliances.${allianceId}`]: next,
+    [`players.${uid}.allianceId`]: allianceId,
+  });
+}
+
+export async function leaveAlliance(code: string, allianceId: string, uid: string): Promise<void> {
+  const db = requireDb();
+  const ref = doc(db, 'rooms', code.toUpperCase());
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+  const room = snap.data() as RoomState;
+  const a = room.alliances[allianceId];
+  if (!a) return;
+  const remaining = a.memberIds.filter((m) => m !== uid);
+  const updates: Record<string, unknown> = {
+    [`players.${uid}.allianceId`]: null,
+  };
+  if (remaining.length === 0) {
+    updates[`alliances.${allianceId}`] = null;
+  } else {
+    updates[`alliances.${allianceId}`] = { ...a, memberIds: remaining };
+  }
+  await updateDoc(ref, updates);
+}
+
+// ---- News feed --------------------------------------------------------------
+
+export async function postNews(code: string, item: Omit<NewsItem, 'id' | 'createdAt'>): Promise<string> {
+  const db = requireDb();
+  const col = collection(db, 'rooms', code.toUpperCase(), 'news');
+  const ref = await addDoc(col, { ...item, createdAt: Date.now() });
+  return ref.id;
+}
+
+export function watchNews(code: string, cb: (items: NewsItem[]) => void): Unsubscribe {
+  const db = requireDb();
+  const col = collection(db, 'rooms', code.toUpperCase(), 'news');
+  const q = query(col, orderBy('createdAt', 'desc'));
+  return onSnapshot(q, (snap) => {
+    const items: NewsItem[] = [];
+    snap.forEach((d) => items.push({ id: d.id, ...(d.data() as Omit<NewsItem, 'id'>) }));
+    cb(items);
+  });
+}
+
+export async function inspireNews(code: string, newsId: string, readerUid: string): Promise<void> {
+  const db = requireDb();
+  const ref = doc(db, 'rooms', code.toUpperCase(), 'news', newsId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+  const item = snap.data() as NewsItem;
+  if (item.inspiredBy?.includes(readerUid)) return;
+  await updateDoc(ref, {
+    inspiredBy: [...(item.inspiredBy ?? []), readerUid],
+  });
+}
