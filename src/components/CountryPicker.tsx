@@ -46,7 +46,7 @@ export function CountryPicker({ open, onClose, room, currentCode, onPick }: Prop
   const selected = hovered ? COUNTRY_BY_CODE[hovered] : null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-bg flex flex-col">
+    <div className="fixed inset-0 z-[1000] bg-bg flex flex-col">
       <header className="flex items-center justify-between p-3 border-b border-border bg-panel">
         <h2 className="font-semibold">Pick your country</h2>
         <button className="p-2 rounded-lg hover:bg-panel2" onClick={onClose}><X className="w-5 h-5" /></button>

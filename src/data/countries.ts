@@ -33,11 +33,23 @@ export interface CountryDef {
   rivals: string[];
   allies: string[];
   center: [number, number];
+  // Optional: scaled-down nuclear arsenal seeded from real-world counts.
+  // Omitted entirely for non-nuclear states.
+  nukes?: number;
 }
+
+// Real-world declared & widely-recognised nuclear states with arsenals scaled
+// for game balance (real counts divided by ~250). Players who pick these
+// countries start with this many warheads. Each warhead deals 2 000 capital
+// damage and consumes one count.
+const NUKES: Record<string, number> = {
+  RU: 25, US: 25, CN: 15, FR: 12, GB: 10, IN: 8, PK: 8, IL: 5, KP: 3,
+};
+function n(c: string): number | undefined { return NUKES[c]; }
 
 export const COUNTRIES: CountryDef[] = [
   // ============== North America ==============
-  { code: 'US', name: 'United States', pop: 334.9, region: 'NorthAmerica', borders: ['CA', 'MX'], blocs: ['NATO', 'G7', 'FiveEyes', 'West'], rivals: ['RU', 'CN', 'IR', 'KP', 'VE', 'CU'], allies: ['GB', 'CA', 'AU', 'NZ', 'JP', 'KR', 'IL', 'DE', 'FR', 'IT', 'PL', 'PH'], center: [39.8, -98.6] },
+  { code: 'US', name: 'United States', pop: 334.9, region: 'NorthAmerica', borders: ['CA', 'MX'], blocs: ['NATO', 'G7', 'FiveEyes', 'West'], rivals: ['RU', 'CN', 'IR', 'KP', 'VE', 'CU'], allies: ['GB', 'CA', 'AU', 'NZ', 'JP', 'KR', 'IL', 'DE', 'FR', 'IT', 'PL', 'PH'], center: [39.8, -98.6], nukes: n('US') },
   { code: 'CA', name: 'Canada', pop: 40.1, region: 'NorthAmerica', borders: ['US'], blocs: ['NATO', 'G7', 'FiveEyes', 'West'], rivals: ['RU', 'CN'], allies: ['US', 'GB', 'AU', 'NZ', 'FR'], center: [56.1, -106.3] },
   { code: 'MX', name: 'Mexico', pop: 128.5, region: 'LatinAmerica', borders: ['US', 'GT', 'BZ'], blocs: ['LATAM'], rivals: [], allies: ['US', 'CA'], center: [23.6, -102.6] },
   // ============== Central America & Caribbean ==============
@@ -75,9 +87,9 @@ export const COUNTRIES: CountryDef[] = [
   { code: 'AR', name: 'Argentina', pop: 46.2, region: 'LatinAmerica', borders: ['CL', 'BO', 'PY', 'BR', 'UY'], blocs: ['LATAM', 'G20'], rivals: ['GB'], allies: ['BR'], center: [-38.4, -63.6] },
   { code: 'UY', name: 'Uruguay', pop: 3.4, region: 'LatinAmerica', borders: ['BR', 'AR'], blocs: ['LATAM'], rivals: [], allies: ['BR', 'AR'], center: [-32.5, -55.8] },
   // ============== Europe (Western/EU & UK) ==============
-  { code: 'GB', name: 'United Kingdom', pop: 67.7, region: 'Europe', borders: ['IE'], blocs: ['NATO', 'G7', 'FiveEyes', 'West', 'Commonwealth'], rivals: ['RU', 'CN', 'AR'], allies: ['US', 'CA', 'AU', 'NZ', 'FR', 'DE'], center: [54.7, -3.4] },
+  { code: 'GB', name: 'United Kingdom', pop: 67.7, region: 'Europe', borders: ['IE'], blocs: ['NATO', 'G7', 'FiveEyes', 'West', 'Commonwealth'], rivals: ['RU', 'CN', 'AR'], allies: ['US', 'CA', 'AU', 'NZ', 'FR', 'DE'], center: [54.7, -3.4], nukes: n('GB') },
   { code: 'IE', name: 'Ireland', pop: 5.1, region: 'Europe', borders: ['GB'], blocs: ['EU', 'West'], rivals: [], allies: ['GB', 'US'], center: [53.4, -8.2] },
-  { code: 'FR', name: 'France', pop: 64.8, region: 'Europe', borders: ['BE', 'LU', 'DE', 'CH', 'IT', 'ES', 'AD', 'MC'], blocs: ['NATO', 'EU', 'G7', 'West'], rivals: ['RU'], allies: ['DE', 'GB', 'US', 'IT'], center: [46.2, 2.2] },
+  { code: 'FR', name: 'France', pop: 64.8, region: 'Europe', borders: ['BE', 'LU', 'DE', 'CH', 'IT', 'ES', 'AD', 'MC'], blocs: ['NATO', 'EU', 'G7', 'West'], rivals: ['RU'], allies: ['DE', 'GB', 'US', 'IT'], center: [46.2, 2.2], nukes: n('FR') },
   { code: 'DE', name: 'Germany', pop: 83.3, region: 'Europe', borders: ['DK', 'PL', 'CZ', 'AT', 'CH', 'FR', 'LU', 'BE', 'NL'], blocs: ['NATO', 'EU', 'G7', 'West'], rivals: ['RU'], allies: ['FR', 'US', 'GB'], center: [51.2, 10.5] },
   { code: 'ES', name: 'Spain', pop: 48.4, region: 'Europe', borders: ['PT', 'FR', 'AD'], blocs: ['NATO', 'EU', 'West'], rivals: [], allies: ['US', 'FR', 'DE'], center: [40.5, -3.7] },
   { code: 'PT', name: 'Portugal', pop: 10.4, region: 'Europe', borders: ['ES'], blocs: ['NATO', 'EU', 'West'], rivals: [], allies: ['ES', 'BR', 'GB'], center: [39.4, -8.2] },
@@ -114,7 +126,7 @@ export const COUNTRIES: CountryDef[] = [
   { code: 'BY', name: 'Belarus', pop: 9.5, region: 'EastEurope', borders: ['LV', 'LT', 'PL', 'UA', 'RU'], blocs: ['CSTO'], rivals: ['UA', 'PL', 'LT'], allies: ['RU'], center: [53.7, 27.9] },
   { code: 'UA', name: 'Ukraine', pop: 36.7, region: 'EastEurope', borders: ['BY', 'RU', 'MD', 'RO', 'HU', 'SK', 'PL'], blocs: ['West'], rivals: ['RU', 'BY'], allies: ['US', 'GB', 'PL', 'DE'], center: [48.4, 31.2] },
   { code: 'MD', name: 'Moldova', pop: 2.5, region: 'EastEurope', borders: ['UA', 'RO'], blocs: ['West'], rivals: ['RU'], allies: ['RO', 'UA'], center: [47.4, 28.4] },
-  { code: 'RU', name: 'Russia', pop: 144.4, region: 'EastEurope', borders: ['NO', 'FI', 'EE', 'LV', 'LT', 'PL', 'BY', 'UA', 'GE', 'AZ', 'KZ', 'CN', 'MN', 'KP'], blocs: ['BRICS', 'CSTO', 'SCO', 'G20'], rivals: ['US', 'UA', 'GB', 'PL', 'NATO'], allies: ['BY', 'CN', 'IR', 'SY', 'CU', 'VE', 'KZ'], center: [61.5, 105.3] },
+  { code: 'RU', name: 'Russia', pop: 144.4, region: 'EastEurope', borders: ['NO', 'FI', 'EE', 'LV', 'LT', 'PL', 'BY', 'UA', 'GE', 'AZ', 'KZ', 'CN', 'MN', 'KP'], blocs: ['BRICS', 'CSTO', 'SCO', 'G20'], rivals: ['US', 'UA', 'GB', 'PL', 'NATO'], allies: ['BY', 'CN', 'IR', 'SY', 'CU', 'VE', 'KZ'], center: [61.5, 105.3], nukes: n('RU') },
   { code: 'AL', name: 'Albania', pop: 2.8, region: 'EastEurope', borders: ['ME', 'MK', 'GR'], blocs: ['NATO', 'West'], rivals: ['RS'], allies: ['US', 'TR'], center: [41.2, 20.2] },
   { code: 'MK', name: 'North Macedonia', pop: 2.1, region: 'EastEurope', borders: ['RS', 'AL', 'GR', 'BG'], blocs: ['NATO', 'West'], rivals: [], allies: ['US'], center: [41.6, 21.7] },
   { code: 'RS', name: 'Serbia', pop: 6.7, region: 'EastEurope', borders: ['HU', 'RO', 'BG', 'MK', 'ME', 'BA', 'HR'], blocs: [], rivals: ['AL'], allies: ['RU', 'CN'], center: [44.0, 21.0] },
@@ -129,7 +141,7 @@ export const COUNTRIES: CountryDef[] = [
   { code: 'TR', name: 'Turkey', pop: 85.8, region: 'MENA', borders: ['GR', 'BG', 'GE', 'AM', 'AZ', 'IR', 'IQ', 'SY'], blocs: ['NATO', 'G20'], rivals: ['GR', 'CY', 'AM', 'SY'], allies: ['AZ', 'PK', 'QA', 'US'], center: [38.9, 35.2] },
   { code: 'SY', name: 'Syria', pop: 23.2, region: 'MENA', borders: ['TR', 'IQ', 'JO', 'IL', 'LB'], blocs: ['ArabLeague'], rivals: ['IL', 'TR', 'US'], allies: ['RU', 'IR'], center: [34.8, 38.9] },
   { code: 'LB', name: 'Lebanon', pop: 5.3, region: 'MENA', borders: ['SY', 'IL'], blocs: ['ArabLeague'], rivals: ['IL'], allies: ['IR', 'FR'], center: [33.8, 35.8] },
-  { code: 'IL', name: 'Israel', pop: 9.7, region: 'MENA', borders: ['LB', 'SY', 'JO', 'EG', 'PS'], blocs: ['West'], rivals: ['IR', 'SY', 'LB', 'PS', 'YE'], allies: ['US', 'IN', 'DE', 'AZ'], center: [31.0, 34.9] },
+  { code: 'IL', name: 'Israel', pop: 9.7, region: 'MENA', borders: ['LB', 'SY', 'JO', 'EG', 'PS'], blocs: ['West'], rivals: ['IR', 'SY', 'LB', 'PS', 'YE'], allies: ['US', 'IN', 'DE', 'AZ'], center: [31.0, 34.9], nukes: n('IL') },
   { code: 'PS', name: 'Palestine', pop: 5.4, region: 'MENA', borders: ['IL', 'EG', 'JO'], blocs: ['ArabLeague'], rivals: ['IL'], allies: ['IR', 'TR', 'QA'], center: [31.95, 35.3] },
   { code: 'JO', name: 'Jordan', pop: 11.3, region: 'MENA', borders: ['SY', 'IQ', 'SA', 'IL', 'PS'], blocs: ['ArabLeague'], rivals: [], allies: ['US', 'SA', 'GB'], center: [30.6, 36.2] },
   { code: 'IQ', name: 'Iraq', pop: 45.5, region: 'MENA', borders: ['TR', 'IR', 'KW', 'SA', 'JO', 'SY'], blocs: ['ArabLeague'], rivals: [], allies: ['IR', 'US'], center: [33.2, 43.7] },
@@ -204,17 +216,17 @@ export const COUNTRIES: CountryDef[] = [
   { code: 'TJ', name: 'Tajikistan', pop: 10.1, region: 'CentralAsia', borders: ['UZ', 'KG', 'CN', 'AF'], blocs: ['SCO', 'CSTO'], rivals: ['KG'], allies: ['RU'], center: [38.9, 71.3] },
   { code: 'AF', name: 'Afghanistan', pop: 42.2, region: 'CentralAsia', borders: ['IR', 'TM', 'UZ', 'TJ', 'CN', 'PK'], blocs: [], rivals: [], allies: ['PK'], center: [33.9, 67.7] },
   // ============== South Asia ==============
-  { code: 'PK', name: 'Pakistan', pop: 240.5, region: 'SouthAsia', borders: ['AF', 'CN', 'IN', 'IR'], blocs: ['SCO'], rivals: ['IN', 'IL'], allies: ['CN', 'TR', 'SA', 'AZ'], center: [30.4, 69.3] },
-  { code: 'IN', name: 'India', pop: 1428.6, region: 'SouthAsia', borders: ['PK', 'CN', 'NP', 'BT', 'BD', 'MM'], blocs: ['BRICS', 'G20', 'Commonwealth'], rivals: ['PK', 'CN'], allies: ['RU', 'US', 'IL', 'FR', 'JP'], center: [20.6, 78.96] },
+  { code: 'PK', name: 'Pakistan', pop: 240.5, region: 'SouthAsia', borders: ['AF', 'CN', 'IN', 'IR'], blocs: ['SCO'], rivals: ['IN', 'IL'], allies: ['CN', 'TR', 'SA', 'AZ'], center: [30.4, 69.3], nukes: n('PK') },
+  { code: 'IN', name: 'India', pop: 1428.6, region: 'SouthAsia', borders: ['PK', 'CN', 'NP', 'BT', 'BD', 'MM'], blocs: ['BRICS', 'G20', 'Commonwealth'], rivals: ['PK', 'CN'], allies: ['RU', 'US', 'IL', 'FR', 'JP'], center: [20.6, 78.96], nukes: n('IN') },
   { code: 'BD', name: 'Bangladesh', pop: 172.9, region: 'SouthAsia', borders: ['IN', 'MM'], blocs: ['Commonwealth'], rivals: [], allies: ['IN', 'CN'], center: [23.7, 90.4] },
   { code: 'NP', name: 'Nepal', pop: 30.9, region: 'SouthAsia', borders: ['IN', 'CN'], blocs: [], rivals: [], allies: ['IN'], center: [28.4, 84.1] },
   { code: 'BT', name: 'Bhutan', pop: 0.8, region: 'SouthAsia', borders: ['IN', 'CN'], blocs: [], rivals: [], allies: ['IN'], center: [27.5, 90.4] },
   { code: 'LK', name: 'Sri Lanka', pop: 21.9, region: 'SouthAsia', borders: [], blocs: ['Commonwealth'], rivals: [], allies: ['IN', 'CN'], center: [7.9, 80.8] },
   { code: 'MV', name: 'Maldives', pop: 0.5, region: 'SouthAsia', borders: [], blocs: ['Commonwealth'], rivals: [], allies: ['IN'], center: [3.2, 73.2] },
   // ============== East Asia ==============
-  { code: 'CN', name: 'China', pop: 1410.7, region: 'EastAsia', borders: ['RU', 'MN', 'KP', 'KZ', 'KG', 'TJ', 'AF', 'PK', 'IN', 'NP', 'BT', 'MM', 'LA', 'VN'], blocs: ['BRICS', 'SCO', 'G20'], rivals: ['US', 'IN', 'JP', 'TW', 'PH', 'VN'], allies: ['RU', 'KP', 'PK', 'IR'], center: [35.9, 104.2] },
+  { code: 'CN', name: 'China', pop: 1410.7, region: 'EastAsia', borders: ['RU', 'MN', 'KP', 'KZ', 'KG', 'TJ', 'AF', 'PK', 'IN', 'NP', 'BT', 'MM', 'LA', 'VN'], blocs: ['BRICS', 'SCO', 'G20'], rivals: ['US', 'IN', 'JP', 'TW', 'PH', 'VN'], allies: ['RU', 'KP', 'PK', 'IR'], center: [35.9, 104.2], nukes: n('CN') },
   { code: 'MN', name: 'Mongolia', pop: 3.4, region: 'EastAsia', borders: ['RU', 'CN'], blocs: [], rivals: [], allies: ['RU', 'CN'], center: [46.9, 103.8] },
-  { code: 'KP', name: 'North Korea', pop: 26.2, region: 'EastAsia', borders: ['CN', 'RU', 'KR'], blocs: [], rivals: ['US', 'KR', 'JP'], allies: ['CN', 'RU'], center: [40.3, 127.5] },
+  { code: 'KP', name: 'North Korea', pop: 26.2, region: 'EastAsia', borders: ['CN', 'RU', 'KR'], blocs: [], rivals: ['US', 'KR', 'JP'], allies: ['CN', 'RU'], center: [40.3, 127.5], nukes: n('KP') },
   { code: 'KR', name: 'South Korea', pop: 51.7, region: 'EastAsia', borders: ['KP'], blocs: ['G20', 'West'], rivals: ['KP', 'CN'], allies: ['US', 'JP'], center: [35.9, 127.8] },
   { code: 'JP', name: 'Japan', pop: 123.3, region: 'EastAsia', borders: [], blocs: ['G7', 'West', 'G20'], rivals: ['CN', 'KP', 'RU'], allies: ['US', 'KR', 'AU', 'IN', 'PH'], center: [36.2, 138.3] },
   // ============== Southeast Asia ==============

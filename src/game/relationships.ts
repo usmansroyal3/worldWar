@@ -116,3 +116,46 @@ export function viewerSharesLandBorder(
   }
   return false;
 }
+
+// Numeric 0-100 relationship rating from viewer's POV.
+// >75 friendly, 40-75 neutral, <40 enemy (per spec).
+export function relationshipRating(
+  room: RoomState,
+  viewerCode: string,
+  targetCode: string
+): number {
+  if (viewerCode === targetCode) return 100;
+  const viewer = COUNTRY_BY_CODE[viewerCode];
+  const target = COUNTRY_BY_CODE[targetCode];
+  if (!viewer || !target) return 50;
+
+  // Player-controlled target: alliance status dominates.
+  const targetOwner = Object.values(room.players).find(
+    (p) => p.countryCode === targetCode || p.territories.includes(targetCode)
+  );
+  const viewerOwner = Object.values(room.players).find((p) => p.countryCode === viewerCode);
+  if (targetOwner && viewerOwner && targetOwner.uid !== viewerOwner.uid) {
+    if (
+      viewerOwner.allianceId &&
+      targetOwner.allianceId &&
+      viewerOwner.allianceId === targetOwner.allianceId
+    ) {
+      return 92;
+    }
+    return 18;
+  }
+
+  // NPC: prefer live acceptance if set; otherwise compute from defaults.
+  const npc = room.npc[targetCode];
+  if (npc) return npc.acceptance;
+  const rel = defaultNpcRelationship(viewer, target);
+  if (rel === 'friendly') return 80;
+  if (rel === 'enemy') return 18;
+  return 55;
+}
+
+export function relationshipLabel(rating: number): 'friendly' | 'neutral' | 'enemy' {
+  if (rating > 75) return 'friendly';
+  if (rating < 40) return 'enemy';
+  return 'neutral';
+}

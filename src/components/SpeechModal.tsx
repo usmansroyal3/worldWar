@@ -52,7 +52,7 @@ export function SpeechModal({ open, onClose, room, me, day }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-3">
+    <div className="fixed inset-0 z-[1000] bg-black/70 flex items-end sm:items-center justify-center p-3">
       <div className="panel w-full max-w-md p-4 max-h-full overflow-y-auto">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold">Daily speech</h3>
