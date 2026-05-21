@@ -14,9 +14,11 @@ interface Props {
   viewerCountryCode: string | null;
   selectedCode?: string | null;
   onCountryClick?: (code: string) => void;
-  // If provided, restrict tinting to relationship-from-viewer.
   highlightMode?: 'relationship' | 'plain' | 'pickable';
   pickableSet?: Set<string> | null;
+  // Optional react-leaflet children rendered above the country polygons —
+  // typically <IronDomeOverlay/>, <AttackRoutes/>, <CampPins/>.
+  overlays?: React.ReactNode;
 }
 
 // Natural Earth uses ISO_A2 / ISO_A3. We map them to our internal codes.
@@ -52,7 +54,7 @@ function featureCode(feature: Feature): string | null {
   return null;
 }
 
-export function WorldMap({ room, viewerCountryCode, selectedCode, onCountryClick, highlightMode = 'relationship', pickableSet }: Props) {
+export function WorldMap({ room, viewerCountryCode, selectedCode, onCountryClick, highlightMode = 'relationship', pickableSet, overlays }: Props) {
   const [geo, setGeo] = useState<FeatureCollection | null>(null);
   const [hover, setHover] = useState<string | null>(null);
 
@@ -134,6 +136,7 @@ export function WorldMap({ room, viewerCountryCode, selectedCode, onCountryClick
           onEachFeature={onEach}
         />
       )}
+      {overlays}
       <NoTiles />
     </MapContainer>
   );

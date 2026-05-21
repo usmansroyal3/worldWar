@@ -12,30 +12,55 @@ export interface Perk {
 }
 
 export type PerkId =
-  | 'wealthy'        // start with more money
-  | 'highMorale'     // start with high morale, faster build
-  | 'innovator'     // unlock better tech faster
-  | 'diplomat'      // cheaper army items, better relations
-  | 'industrial'    // produce goods faster
-  | 'militaristic'; // start with stronger army
+  | 'wealthy'
+  | 'highMorale'
+  | 'innovator'
+  | 'diplomat'
+  | 'industrial'
+  | 'militaristic';
 
+// Army units — expanded with modern equipment and nuclear/Iron Dome
 export interface ArmyState {
   infantry: number;
   tanks: number;
   fighters: number;
+  stealth: number;     // F-35-class stealth multirole
+  rafales: number;     // Rafale-class heavy multirole
   bombers: number;
   ships: number;
+  subs: number;        // submarines
   missiles: number;
+  // Strategic
+  nukes: number;       // remaining nuclear warheads
+  // Defensive
+  airDefense: number;  // Patriot / S-400 class
+  groundDefense: number; // tank traps, fortifications
+  ironDomes: number;   // Iron Dome batteries (1+ allows activation)
 }
 
 export interface CapitalState {
-  hp: number;       // damage points remaining, starts at 10000
+  hp: number;          // starts at 10 000
   maxHp: number;
 }
 
 export interface DailyFlags {
   speechUsed: boolean;
-  lastResetDay: number;
+  lastResetDay: number;   // last day a daily tick was applied to THIS player
+}
+
+export interface ArmyCamp {
+  id: string;
+  hostCountryCode: string;  // friendly country code where camp is hosted
+  hp: number;
+  maxHp: number;            // 2000
+  hasAirstrip: boolean;
+  garrison: ArmyState;      // units stationed at this camp
+  createdDay: number;
+}
+
+export interface IronDomeState {
+  activeUntilDay: number;   // 0 = inactive; otherwise day until which the dome is active
+  interceptsToday: number;  // counter that resets at end of day
 }
 
 export interface PlayerState {
@@ -46,17 +71,17 @@ export interface PlayerState {
   countryCode: string | null;
   allianceId: string | null;
   perks: PerkId[];
-  // Stats (0-100 unless noted)
   morale: number;
   reputation: number;
-  money: number;       // in millions
-  innovation: number;  // 0-100
+  money: number;
+  innovation: number;
   army: ArmyState;
   capital: CapitalState;
-  // Held territories (country codes the player owns/controls)
   territories: string[];
-  // Per-day flags (reset on day change)
   daily: DailyFlags;
+  // New systems
+  camps: ArmyCamp[];
+  ironDome: IronDomeState;
 }
 
 export interface AllianceState {
@@ -68,13 +93,23 @@ export interface AllianceState {
 
 export type AdvanceKind = 'military' | 'peace' | 'tourism';
 
-// Pending diplomatic requests vs NPC nations
 export interface NpcRelation {
-  acceptance: number;   // 0-100; >=90 friendly, <=10 enemy
+  acceptance: number;
   lastAdvanceDay?: number;
 }
 
 export type SpeechKind = 'hate' | 'motivation' | 'solidarity';
+
+export type NewsKind =
+  | 'speech'
+  | 'build'
+  | 'attack'
+  | 'advance'
+  | 'alliance'
+  | 'system'
+  | 'nuke'
+  | 'intercept'
+  | 'camp';
 
 export interface NewsItem {
   id: string;
@@ -83,11 +118,12 @@ export interface NewsItem {
   authorCountry: string | null;
   createdAt: number;
   day: number;
-  kind: 'speech' | 'build' | 'attack' | 'advance' | 'alliance' | 'system';
+  kind: NewsKind;
   title: string;
   body: string;
-  // For speech items: track who has already inspired
   inspiredBy?: string[];
+  // meta carries optional structured payload used by animations + UI
+  // (e.g. routeFrom/routeTo ISO codes for attack-route polyline)
   meta?: Record<string, string | number | boolean | null>;
 }
 
@@ -96,8 +132,20 @@ export interface MoveItem {
   authorId: string;
   createdAt: number;
   day: number;
-  kind: 'build' | 'attack' | 'missile' | 'advance' | 'transfer' | 'speech';
+  kind: 'build' | 'attack' | 'missile' | 'advance' | 'transfer' | 'speech' | 'nuke';
   payload: Record<string, unknown>;
+}
+
+// Pending alliance vote on a nuclear strike. Approval-required when proposer is in an alliance.
+export interface PendingNuke {
+  id: string;
+  proposerId: string;
+  proposerCountry: string;
+  targetCode: string;       // country code being struck
+  targetPlayerId: string | null; // if the target is player-owned
+  approvedBy: string[];     // alliance member uids who have signed off
+  createdAt: number;
+  day: number;
 }
 
 export interface RoomState {
@@ -105,15 +153,12 @@ export interface RoomState {
   adminId: string;
   createdAt: Timestamp | number;
   status: Phase;
-  // Configurable preparation days (min 7)
   prepDays: number;
-  // War always 7 days (configurable later)
   warDays: number;
   startedAt: Timestamp | number | null;
-  // 24 hour day length in ms (default 86_400_000); exposed for future test mode
   dayLengthMs: number;
   players: Record<string, PlayerState>;
   alliances: Record<string, AllianceState>;
-  // NPC + owned-country state keyed by ISO code
   npc: Record<string, NpcRelation>;
+  pendingNukes: Record<string, PendingNuke>;
 }

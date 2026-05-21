@@ -67,3 +67,23 @@ body {
 /* Hide scrollbars on mobile feel */
 .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
 .scrollbar-thin::-webkit-scrollbar-thumb { background: #1e2c54; border-radius: 3px; }
+
+/* Chat bubbles for Bhairava tutorial */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in { animation: fade-in 200ms ease-out both; }
+
+/* Iron Dome pulsing shield */
+@keyframes dome-pulse {
+  0%, 100% { opacity: 0.25; transform: scale(1); }
+  50%      { opacity: 0.5;  transform: scale(1.08); }
+}
+.dome-pulse { animation: dome-pulse 2.2s ease-in-out infinite; transform-origin: center; }
+
+/* Attack route polyline dash march */
+@keyframes attack-dash {
+  to { stroke-dashoffset: -200; }
+}
+.attack-dash { animation: attack-dash 1.8s linear infinite; }

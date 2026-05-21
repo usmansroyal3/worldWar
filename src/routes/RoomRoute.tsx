@@ -95,5 +95,5 @@ export function RoomRoute() {
     return <Lobby room={room} me={me} isAdmin={user.uid === room.adminId} />;
   }
 
-  return <GameView room={room} me={me} />;
+  return <GameView room={room} me={me} isAdmin={user.uid === room.adminId} />;
 }

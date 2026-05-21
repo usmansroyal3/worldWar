@@ -16,6 +16,7 @@ import { db } from './config';
 import type { AllianceState, NewsItem, PlayerState, RoomState } from '@/types';
 import { emptyArmy, startingArmy, startingInnovation, startingMoney, startingMorale } from '@/game/army';
 import { rollPerks } from '@/data/perks';
+import { COUNTRY_BY_CODE } from '@/data/countries';
 
 const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -49,7 +50,9 @@ export function blankPlayer(uid: string, name: string): PlayerState {
     army: { ...emptyArmy(), ...startingArmy(perks) },
     capital: { hp: 10000, maxHp: 10000 },
     territories: [],
-    daily: { speechUsed: false, lastResetDay: 1 },
+    daily: { speechUsed: false, lastResetDay: 0 },
+    camps: [],
+    ironDome: { activeUntilDay: 0, interceptsToday: 0 },
   };
 }
 
@@ -78,6 +81,7 @@ export async function createRoom(uid: string, displayName: string, prepDays = 7)
     players: { [uid]: blankPlayer(uid, displayName) },
     alliances: {},
     npc: {},
+    pendingNukes: {},
   };
   await setDoc(ref, { ...room, createdAt: serverTimestamp() });
   return code;
@@ -124,10 +128,42 @@ export async function updateRoom(code: string, patch: Partial<RoomState>): Promi
 export async function startGame(code: string): Promise<void> {
   const db = requireDb();
   const ref = doc(db, 'rooms', code.toUpperCase());
-  await updateDoc(ref, {
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error('Room missing');
+  const room = snap.data() as RoomState;
+
+  // Seed each player's nuclear arsenal from their chosen country's real-world count.
+  const updates: Record<string, unknown> = {
     status: 'preparation',
     startedAt: serverTimestamp(),
+  };
+  Object.values(room.players).forEach((p) => {
+    if (!p.countryCode) return;
+    const n = COUNTRY_BY_CODE[p.countryCode]?.nukes ?? 0;
+    updates[`players.${p.uid}.army.nukes`] = n;
   });
+  await updateDoc(ref, updates);
+}
+
+// Admin-only TEST helper: shift startedAt backwards by one day so all clients
+// roll into the next day immediately. Remove before public release.
+export async function fastForwardOneDay(code: string): Promise<void> {
+  const db = requireDb();
+  const ref = doc(db, 'rooms', code.toUpperCase());
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+  const room = snap.data() as RoomState;
+  const start = room.startedAt;
+  if (!start) return;
+  let ms: number;
+  if (typeof start === 'number') ms = start;
+  else {
+    const anyT = start as { toMillis?: () => number; seconds?: number };
+    if (typeof anyT.toMillis === 'function') ms = anyT.toMillis();
+    else if (typeof anyT.seconds === 'number') ms = anyT.seconds * 1000;
+    else return;
+  }
+  await updateDoc(ref, { startedAt: ms - room.dayLengthMs });
 }
 
 export async function createAlliance(code: string, founderId: string, name: string): Promise<string> {
@@ -205,3 +241,34 @@ export async function inspireNews(code: string, newsId: string, readerUid: strin
     inspiredBy: [...(item.inspiredBy ?? []), readerUid],
   });
 }
+
+// ---- Pending nuclear proposals ---------------------------------------------
+
+import type { PendingNuke } from '@/types';
+
+export async function proposeNuke(code: string, proposal: PendingNuke): Promise<void> {
+  const db = requireDb();
+  const ref = doc(db, 'rooms', code.toUpperCase());
+  await updateDoc(ref, { [`pendingNukes.${proposal.id}`]: proposal });
+}
+
+export async function approveNuke(code: string, proposalId: string, uid: string): Promise<void> {
+  const db = requireDb();
+  const ref = doc(db, 'rooms', code.toUpperCase());
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+  const room = snap.data() as RoomState;
+  const p = room.pendingNukes?.[proposalId];
+  if (!p) return;
+  if (p.approvedBy.includes(uid)) return;
+  await updateDoc(ref, {
+    [`pendingNukes.${proposalId}.approvedBy`]: [...p.approvedBy, uid],
+  });
+}
+
+export async function cancelNuke(code: string, proposalId: string): Promise<void> {
+  const db = requireDb();
+  const ref = doc(db, 'rooms', code.toUpperCase());
+  await updateDoc(ref, { [`pendingNukes.${proposalId}`]: null });
+}
+
