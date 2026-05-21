@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Megaphone, Map as MapIcon, Newspaper, Swords, Hammer, Trophy } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Megaphone, Map as MapIcon, Newspaper, Swords, Hammer, Trophy, HelpCircle } from 'lucide-react';
 import { useGameClock } from '@/hooks/useGameClock';
 import { useNews } from '@/hooks/useRoom';
 import { formatCountdown } from '@/game/timer';
@@ -11,6 +11,7 @@ import { NewsFeed } from './NewsFeed';
 import { PrepPanel } from './PrepPanel';
 import { WarPanel } from './WarPanel';
 import { Standings } from './Standings';
+import { Tutorial, shouldShowTutorial } from './Tutorial';
 import type { PlayerState, RoomState } from '@/types';
 
 type Tab = 'map' | 'build' | 'news' | 'strike' | 'standings';
@@ -20,6 +21,12 @@ export function GameView({ room, me }: { room: RoomState; me: PlayerState }) {
   const news = useNews(room.id);
   const [tab, setTab] = useState<Tab>('map');
   const [speech, setSpeech] = useState(false);
+  const [tutorial, setTutorial] = useState(false);
+
+  // Auto-show tutorial on first game entry per device.
+  useEffect(() => {
+    if (shouldShowTutorial()) setTutorial(true);
+  }, []);
 
   if (!clock) {
     return <div className="p-6 text-muted">Loading game clock...</div>;
@@ -59,6 +66,14 @@ export function GameView({ room, me }: { room: RoomState; me: PlayerState }) {
           <button className="btn-primary text-sm" onClick={() => setSpeech(true)}>
             <Megaphone className="w-4 h-4" />
             Speech
+          </button>
+          <button
+            className="p-2 rounded-lg text-muted hover:bg-panel2 hover:text-ink"
+            onClick={() => setTutorial(true)}
+            aria-label="How to play"
+            title="How to play"
+          >
+            <HelpCircle className="w-4 h-4" />
           </button>
         </div>
         <div className="mt-2"><StatBar me={me} /></div>
@@ -120,6 +135,7 @@ export function GameView({ room, me }: { room: RoomState; me: PlayerState }) {
       </main>
 
       <SpeechModal open={speech} onClose={() => setSpeech(false)} room={room} me={me} day={clock.day} />
+      <Tutorial open={tutorial} onClose={() => setTutorial(false)} room={room} me={me} />
     </div>
   );
 }
