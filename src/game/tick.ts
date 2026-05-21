@@ -1,4 +1,5 @@
 import type { PlayerState } from '@/types';
+import { dailyIncomeForCountry } from './army';
 
 // Daily tick applied once per game day, per player. Returns the patch that
 // should be merged into the player document, or null if no change is needed.
@@ -23,16 +24,14 @@ export function dailyTickPatch(me: PlayerState, currentDay: number): Partial<Pla
   morale = clamp(morale, 0, 100);
   reputation = clamp(reputation, 0, 100);
 
-  // Industrial perk: a free "production token" — apply as a small treasury yield
-  // representing efficient war-economy output (simple stub).
-  let money = me.money;
-  if (me.perks.includes('industrial')) money += 50;
-  if (me.perks.includes('wealthy')) money += 25;
+  // Daily income — base + scaled portion of the country's real-world defense
+  // budget. Big spenders get rich daily yields; small states get a base.
+  const income = dailyIncomeForCountry(me.countryCode, me.perks);
+  const money = me.money + income;
 
   // Iron Dome upkeep — if active days remaining > 0, decrement after the day rolls.
   let ironDome = me.ironDome;
   if (ironDome.activeUntilDay > 0 && currentDay > ironDome.activeUntilDay) {
-    // expired
     ironDome = { activeUntilDay: 0, interceptsToday: 0 };
   } else if (ironDome.activeUntilDay >= currentDay) {
     ironDome = { ...ironDome, interceptsToday: 0 };

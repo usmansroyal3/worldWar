@@ -33,7 +33,7 @@ export function PrepPanel({ room, me, day, onOpenMarket }: Props) {
     if (me.money < cost) return;
     setBusy(unitKey);
     try {
-      const nextArmy = { ...me.army, [unitKey]: me.army[unitKey] + 1 };
+      const nextArmy = { ...me.army, [unitKey]: me.army[unitKey] + unit.batchSize };
       await patchPlayer(room.id, me.uid, {
         army: nextArmy,
         money: me.money - cost,
@@ -45,8 +45,8 @@ export function PrepPanel({ room, me, day, onOpenMarket }: Props) {
           authorCountry: me.countryCode,
           day,
           kind: 'build',
-          title: `${me.name} builds a ${unit.label}`,
-          body: `${COUNTRY_BY_CODE[me.countryCode ?? '']?.name ?? 'A nation'} commissions a new ${unit.label.toLowerCase()}.`,
+          title: `${me.name} commissions ${unit.batchSize.toLocaleString()} ${unit.unitNoun ?? 'units'}`,
+          body: `${COUNTRY_BY_CODE[me.countryCode ?? '']?.name ?? 'A nation'} adds ${unit.batchSize.toLocaleString()} ${unit.unitNoun ?? 'units'} to its ${unit.label.toLowerCase()}.`,
         });
       }
     } finally {
@@ -104,8 +104,9 @@ export function PrepPanel({ room, me, day, onOpenMarket }: Props) {
                         <span className="font-mono text-xs text-warn">{isNuke ? '—' : `$${cost}M`}</span>
                       </div>
                       <div className="text-xs text-muted mt-1">
-                        You have <span className="text-ink font-mono">{me.army[u.key]}</span>
-                        {u.capitalDmg > 0 && <span> · {u.capitalDmg} cap. dmg</span>}
+                        You have <span className="text-ink font-mono">{me.army[u.key].toLocaleString()}</span>
+                        {u.batchSize > 1 && <span> · +{u.batchSize.toLocaleString()} per buy</span>}
+                        {u.capitalDmg > 0 && <span> · {u.capitalDmg} dmg/unit</span>}
                         {u.groundOnly && <span> · Ground only</span>}
                         {u.defensive && <span> · Defensive</span>}
                       </div>

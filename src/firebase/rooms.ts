@@ -14,7 +14,7 @@ import {
 import { nanoid } from 'nanoid';
 import { db } from './config';
 import type { AllianceState, NewsItem, PlayerState, RoomState } from '@/types';
-import { emptyArmy, startingArmy, startingInnovation, startingMoney, startingMorale } from '@/game/army';
+import { emptyArmy, startingArmy, startingInnovation, startingMoneyForCountry, startingMorale } from '@/game/army';
 import { rollPerks } from '@/data/perks';
 import { COUNTRY_BY_CODE } from '@/data/countries';
 
@@ -45,7 +45,9 @@ export function blankPlayer(uid: string, name: string): PlayerState {
     perks,
     morale: startingMorale(perks),
     reputation: 50,
-    money: startingMoney(perks),
+    // Money is finalised on game start once the country is locked in — until
+    // then we give a base placeholder so the lobby UI shows something sane.
+    money: 1000,
     innovation: startingInnovation(perks),
     army: { ...emptyArmy(), ...startingArmy(perks) },
     capital: { hp: 10000, maxHp: 10000 },
@@ -141,6 +143,8 @@ export async function startGame(code: string): Promise<void> {
     if (!p.countryCode) return;
     const n = COUNTRY_BY_CODE[p.countryCode]?.nukes ?? 0;
     updates[`players.${p.uid}.army.nukes`] = n;
+    // Seed treasury from chosen country's real-world defense budget
+    updates[`players.${p.uid}.money`] = startingMoneyForCountry(p.countryCode, p.perks);
   });
   await updateDoc(ref, updates);
 }

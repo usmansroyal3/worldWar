@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ShoppingCart, Loader2, ChevronRight } from 'lucide-react';
 import { COUNTRY_BY_CODE } from '@/data/countries';
 import { listSellers, listOffers } from '@/game/market';
+import { UNIT_BY_KEY } from '@/game/army';
 import { patchPlayer } from '@/firebase/rooms';
 import type { ArmyState, PlayerState, RoomState } from '@/types';
 
@@ -30,7 +31,8 @@ export function MarketView({ room, me }: Props) {
     if (me.money < price) return;
     setBusy(true);
     try {
-      const nextArmy = { ...me.army, [unitKey]: me.army[unitKey] + 1 };
+      const batch = UNIT_BY_KEY[unitKey].batchSize;
+      const nextArmy = { ...me.army, [unitKey]: me.army[unitKey] + batch };
       await patchPlayer(room.id, me.uid, {
         money: me.money - price,
         army: nextArmy,
@@ -88,7 +90,10 @@ export function MarketView({ room, me }: Props) {
                     </span>
                   </div>
                   {o.unit.description && <div className="text-xs text-muted mt-1">{o.unit.description}</div>}
-                  <div className="text-xs text-muted mt-1">You own: <span className="font-mono">{me.army[o.unit.key]}</span></div>
+                  <div className="text-xs text-muted mt-1">
+                    You own: <span className="font-mono">{me.army[o.unit.key].toLocaleString()}</span>
+                    {o.unit.batchSize > 1 && <span className="ml-2">· +{o.unit.batchSize.toLocaleString()} per buy</span>}
+                  </div>
                   {busy && <Loader2 className="w-3.5 h-3.5 animate-spin mt-1" />}
                 </button>
               </li>
