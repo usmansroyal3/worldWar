@@ -2,16 +2,15 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Rooms hold all multiplayer game state. Anyone signed in (anonymous auth) can read.
-    // Writes are limited to the room admin (for lifecycle) or the player updating their own slot.
+    // Rooms hold all multiplayer game state. Any signed-in player can read and
+    // write — necessary so new players can add themselves to the players map
+    // when joining. For a friend-group game this is acceptable; tighten with
+    // field-level rules later if you want to prevent stat-tampering.
     match /rooms/{roomId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null
         && request.resource.data.adminId == request.auth.uid;
-      allow update: if request.auth != null && (
-        resource.data.adminId == request.auth.uid
-        || request.auth.uid in resource.data.players
-      );
+      allow update: if request.auth != null;
       allow delete: if request.auth != null
         && resource.data.adminId == request.auth.uid;
 
