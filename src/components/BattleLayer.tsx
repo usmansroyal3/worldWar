@@ -17,6 +17,7 @@ const TTL_MS = 16_000;
 export function BattleLayer({ news }: { news: NewsItem[] }) {
   const map = useMap();
   const active = useRef<Map<string, () => void>>(new Map());
+  const seen = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const now = Date.now();
@@ -34,21 +35,26 @@ export function BattleLayer({ news }: { news: NewsItem[] }) {
       if (!from || !to) return;
       if (active.current.has(event.id)) return;
 
+      // Auto-pan the map to frame this battle. flyToBounds smoothly animates
+      // pan + zoom so even an inattentive player can't miss the action.
+      // We only fly for events that are very fresh (<5s) — replays of older
+      // news after a tab refocus shouldn't yank the camera around.
+      if (age < 5000 && !seen.current.has(event.id)) {
+        seen.current.add(event.id);
+        try {
+          const bounds = L.latLngBounds([from, to]).pad(0.5);
+          map.flyToBounds(bounds, { duration: 1.2, maxZoom: 4, padding: [40, 40] });
+        } catch { /* ignore — flyToBounds can throw if the map isn't sized yet */ }
+      }
+
       const cleanup = spawnBattle(map, event, from, to);
       active.current.set(event.id, cleanup);
 
-      // Auto-remove from registry once expired
       setTimeout(() => {
         const c = active.current.get(event.id);
         if (c) { c(); active.current.delete(event.id); }
       }, TTL_MS);
     });
-
-    // Trim outdated entries on each pass
-    return () => {
-      // Don't wipe on every render — only on full unmount in the cleanup of
-      // a no-deps version. We intentionally keep markers across renders.
-    };
   }, [news, map]);
 
   // Final unmount cleanup
@@ -154,25 +160,35 @@ function spawnBattle(
   const dmg = (meta?.dmg as number | undefined) ?? 0;
   const intercepted = !!meta?.intercepted;
 
-  // Route line (always present, gives spatial context)
-  const route = L.polyline([from, to], {
-    color: kind === 'nuke' ? '#fbbf24' : intercepted ? '#60a5fa' : '#ef4444',
-    weight: kind === 'nuke' ? 4 : 2,
-    dashArray: '8 6',
-    opacity: 0.85,
-    className: 'attack-dash',
+  // Route line (always present, gives spatial context). We draw a glow halo
+  // underneath and the actual dashed line on top for visibility on dark map.
+  const routeColor = kind === 'nuke' ? '#fbbf24' : intercepted ? '#60a5fa' : '#ef4444';
+  const halo = L.polyline([from, to], {
+    color: routeColor,
+    weight: kind === 'nuke' ? 10 : 8,
+    opacity: 0.35,
+    interactive: false,
   });
+  const route = L.polyline([from, to], {
+    color: routeColor,
+    weight: kind === 'nuke' ? 5 : 3.5,
+    dashArray: '10 8',
+    opacity: 1,
+    className: 'attack-dash',
+    interactive: false,
+  });
+  addMarker(halo);
   addMarker(route);
 
   // ── Intercepted (missile that's stopped mid-flight) ──
   if (kind === 'intercept' || (kind === 'attack' && intercepted)) {
-    const incoming = L.marker(from, { icon: makeIcon('🚀', 'rocket-spin', 26), interactive: false, zIndexOffset: 800 });
+    const incoming = L.marker(from, { icon: makeIcon('🚀', 'rocket-spin glow-red', 32), interactive: false, zIndexOffset: 800 });
     addMarker(incoming);
     flyAlong(incoming, from, midpoint(from, to), 1500, () => {
-      const intRise = L.marker(to, { icon: makeIcon('🛡️', 'shield-rise', 30), interactive: false, zIndexOffset: 800 });
+      const intRise = L.marker(to, { icon: makeIcon('🛡️', 'shield-rise', 38), interactive: false, zIndexOffset: 800 });
       addMarker(intRise);
       flyAlong(intRise, to, midpoint(from, to), 700, () => {
-        const flash = L.marker(midpoint(from, to), { icon: makeIcon('💥', 'boom-pop big', 40), interactive: false, zIndexOffset: 900 });
+        const flash = L.marker(midpoint(from, to), { icon: makeIcon('💥', 'boom-pop big', 52), interactive: false, zIndexOffset: 900 });
         addMarker(flash);
         spawnImpactBadge(map, midpoint(from, to), '🛡️ INTERCEPTED', '#60a5fa', addMarker, after);
         after(1500, () => { incoming.remove(); intRise.remove(); });
@@ -183,14 +199,14 @@ function spawnBattle(
 
   // ── Nuclear strike ──
   if (kind === 'nuke') {
-    const nuke = L.marker(from, { icon: makeIcon('☢️', 'rocket-spin glow-amber', 32), interactive: false, zIndexOffset: 900 });
+    const nuke = L.marker(from, { icon: makeIcon('☢️', 'rocket-spin glow-amber', 44), interactive: false, zIndexOffset: 900 });
     addMarker(nuke);
     flyAlong(nuke, from, to, 4500, () => {
       nuke.remove();
       // Massive expanding shockwave + mushroom
       const shock1 = L.circleMarker(to, { radius: 8, color: '#fbbf24', fillColor: '#fef3c7', fillOpacity: 0.9, weight: 3, interactive: false, className: 'impact-ring nuke-ring' });
       const shock2 = L.circleMarker(to, { radius: 8, color: '#f97316', fillColor: '#fed7aa', fillOpacity: 0.6, weight: 3, interactive: false, className: 'impact-ring nuke-ring-2' });
-      const cloud = L.marker(to, { icon: makeIcon('☁️', 'nuke-cloud', 64), interactive: false, zIndexOffset: 950 });
+      const cloud = L.marker(to, { icon: makeIcon('☁️', 'nuke-cloud', 80), interactive: false, zIndexOffset: 950 });
       addMarker(shock1); addMarker(shock2); addMarker(cloud);
       spawnImpactBadge(map, to, `☢️ ${dmg.toLocaleString()} dmg`, '#fbbf24', addMarker, after, 5000);
     });
@@ -210,7 +226,7 @@ function spawnBattle(
       const offset = (i - visualCount / 2) * 0.6;
       const startPos: LatLng = [from[0] + offset * 0.3, from[1] + offset];
       const targetOrbit: LatLng = to;
-      const planeIcon = makeIcon(planeEmoji, 'plane-bob', 22);
+      const planeIcon = makeIcon(planeEmoji, 'plane-bob', 30);
       const plane = L.marker(startPos, { icon: planeIcon, interactive: false, zIndexOffset: 700 + i });
       addMarker(plane);
       after(i * 150, () => {
@@ -241,7 +257,7 @@ function spawnBattle(
       to[1] + (from[1] - to[1]) * 0.25,
     ];
     const isSub = primary === 'subs';
-    const shipIcon = makeIcon(isSub ? '⚓' : '🚢', isSub ? 'sub-stealth' : 'ship-cruise', 24);
+    const shipIcon = makeIcon(isSub ? '⚓' : '🚢', isSub ? 'sub-stealth' : 'ship-cruise', 32);
     const ship = L.marker(from, { icon: shipIcon, interactive: false });
     addMarker(ship);
     flyAlong(ship, from, offshore, 3500, () => {
@@ -249,7 +265,7 @@ function spawnBattle(
       const salvo = 3;
       for (let i = 0; i < salvo; i++) {
         after(i * 350, () => {
-          const m = L.marker(offshore, { icon: makeIcon('🚀', 'rocket-spin', 20), interactive: false });
+          const m = L.marker(offshore, { icon: makeIcon('🚀', 'rocket-spin glow-red', 28), interactive: false });
           addMarker(m);
           flyAlong(m, offshore, to, 1500, () => {
             m.remove();
@@ -270,7 +286,7 @@ function spawnBattle(
       const offset = (i - visualCount / 2) * 0.5;
       const startPos: LatLng = [from[0] + offset * 0.3, from[1] + offset];
       const endPos: LatLng = [to[0] + offset * 0.3, to[1] + offset];
-      const m = L.marker(startPos, { icon: makeIcon(emoji, 'ground-march', 20), interactive: false });
+      const m = L.marker(startPos, { icon: makeIcon(emoji, 'ground-march', 28), interactive: false });
       addMarker(m);
       after(i * 200, () => flyAlong(m, startPos, endPos, 7000));
     }
@@ -286,7 +302,7 @@ function spawnBattle(
     const visualCount = Math.min(5, Math.max(1, (units.missiles as number) ?? 1));
     for (let i = 0; i < visualCount; i++) {
       after(i * 220, () => {
-        const m = L.marker(from, { icon: makeIcon('🚀', 'rocket-spin glow-red', 22), interactive: false });
+        const m = L.marker(from, { icon: makeIcon('🚀', 'rocket-spin glow-red', 30), interactive: false });
         addMarker(m);
         flyAlong(m, from, to, 1800, () => {
           m.remove();
@@ -309,7 +325,7 @@ function sumValues(obj: Record<string, number>, keys: string[]): number {
   return keys.reduce((acc, k) => acc + (obj[k] ?? 0), 0);
 }
 
-function makeIcon(emoji: string, cls: string, size = 24): L.DivIcon {
+function makeIcon(emoji: string, cls: string, size = 36): L.DivIcon {
   return L.divIcon({
     html: `<div class="battle-sprite ${cls}">${emoji}</div>`,
     className: 'battle-sprite-wrap',
@@ -336,7 +352,7 @@ function spawnImpactBadge(
   color: string,
   addMarker: (m: L.Layer) => void,
   after: (ms: number, fn: () => void) => void,
-  lifeMs = 3500,
+  lifeMs = 7000,
 ) {
   const badge = L.marker(at, {
     icon: L.divIcon({

@@ -19,6 +19,7 @@ import { MarketView } from './MarketView';
 import { CampsTab } from './CampsTab';
 import { CampPins, IronDomeOverlay } from './MapOverlays';
 import { BattleLayer } from './BattleLayer';
+import { BattleToasts } from './BattleToasts';
 import type { PlayerState, RoomState } from '@/types';
 
 type Tab = 'map' | 'build' | 'camps' | 'market' | 'strike' | 'news' | 'standings';
@@ -187,6 +188,8 @@ export function GameView({ room, me, isAdmin }: { room: RoomState; me: PlayerSta
           </div>
         )}
       </main>
+
+      <BattleToasts news={news} myUid={me.uid} />
 
       <SpeechModal open={speech} onClose={() => setSpeech(false)} room={room} me={me} day={clock.day} />
       <BhairavaTutorial open={tutorial} onClose={() => setTutorial(false)} room={room} me={me} />
