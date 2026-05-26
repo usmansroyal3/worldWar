@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Crown, Check, Copy, Globe2, Shield, Loader2, Users } from 'lucide-react';
 import { COUNTRY_BY_CODE } from '@/data/countries';
 import { PERKS } from '@/data/perks';
@@ -18,6 +18,18 @@ export function Lobby({ room, me, isAdmin }: Props) {
   const [busy, setBusy] = useState(false);
   const [allianceName, setAllianceName] = useState('');
   const [copied, setCopied] = useState(false);
+
+  // Auto-open the country picker the first time the lobby mounts for a player
+  // who hasn't picked yet — naturally chains "rename" → "pick country" for
+  // freshly-arrived joiners. The ref makes it fire only once so the user can
+  // close the picker and use the lobby normally afterwards.
+  const autoOpened = useRef(false);
+  useEffect(() => {
+    if (!autoOpened.current && !me.countryCode) {
+      autoOpened.current = true;
+      setPicking(true);
+    }
+  }, [me.countryCode]);
 
   const everyoneReady = Object.values(room.players).every((p) => p.ready && p.countryCode);
   const playerCount = Object.keys(room.players).length;
