@@ -122,9 +122,14 @@ export interface NewsItem {
   title: string;
   body: string;
   inspiredBy?: string[];
-  // meta carries optional structured payload used by animations + UI
-  // (e.g. routeFrom/routeTo ISO codes for attack-route polyline)
-  meta?: Record<string, string | number | boolean | null>;
+  // meta carries optional structured payload used by animations + UI.
+  // Common keys for attack/nuke/intercept events:
+  //   routeFrom, routeTo : ISO codes
+  //   dmg                : capital damage dealt
+  //   intercepted        : boolean
+  //   units              : { [unitKey]: count }   ← drives BattleLayer sprites
+  //   primaryUnit        : the strongest contributing unit key
+  meta?: Record<string, unknown>;
 }
 
 export interface MoveItem {

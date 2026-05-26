@@ -17,7 +17,8 @@ import { BhairavaTutorial, shouldShowTutorial } from './BhairavaTutorial';
 import { CountryDetail } from './CountryDetail';
 import { MarketView } from './MarketView';
 import { CampsTab } from './CampsTab';
-import { AttackRoutes, CampPins, IronDomeOverlay } from './MapOverlays';
+import { CampPins, IronDomeOverlay } from './MapOverlays';
+import { BattleLayer } from './BattleLayer';
 import type { PlayerState, RoomState } from '@/types';
 
 type Tab = 'map' | 'build' | 'camps' | 'market' | 'strike' | 'news' | 'standings';
@@ -67,7 +68,7 @@ export function GameView({ room, me, isAdmin }: { room: RoomState; me: PlayerSta
   const overlays = (
     <>
       <IronDomeOverlay room={room} />
-      <AttackRoutes news={news} />
+      <BattleLayer news={news} />
       <CampPins room={room} viewerUid={me.uid} />
     </>
   );

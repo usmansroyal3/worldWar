@@ -95,9 +95,12 @@ export function WarPanel({ room, me, day }: Props) {
       let totalDealt = 0;
       let totalIntercepted = 0;
       const breakdown: Record<string, number> = {};
+      // unit-key → count committed; used by the BattleLayer to spawn sprites
+      const unitsCommitted: Record<string, number> = {};
+      let primaryUnit: string = 'missiles';
+      let primaryDmg = 0;
       let domeIntercepts = 0;
       let domeCost = 0;
-      const defenderArmy = targetPlayer ? { ...targetPlayer.army } : null;
       let defenderMoney = targetPlayer?.money ?? 0;
 
       for (const k of STRIKE_KEYS) {
@@ -106,7 +109,9 @@ export function WarPanel({ room, me, day }: Props) {
         const unit = UNITS.find((u) => u.key === k)!;
         if (unit.groundOnly && !groundReach) continue;
         nextArmy[k] -= n;
+        unitsCommitted[k] = n;
         let dmg = unit.capitalDmg * n;
+        if (dmg > primaryDmg) { primaryDmg = dmg; primaryUnit = k; }
         // Air defense interception (probabilistic per round)
         if (targetPlayer && unit.category === 'air' && targetPlayer.army.airDefense > 0) {
           const interceptChance = unit.key === 'stealth' ? 0.125 : 0.25;
@@ -165,6 +170,8 @@ export function WarPanel({ room, me, day }: Props) {
           routeTo: target!,
           dmg: Math.round(totalDealt),
           intercepted: domeIntercepts > 0,
+          units: unitsCommitted,
+          primaryUnit,
         },
       });
 
