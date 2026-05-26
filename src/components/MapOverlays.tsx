@@ -1,26 +1,18 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Circle, Polyline, useMap } from 'react-leaflet';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Circle, CircleMarker, Polyline, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { COUNTRY_BY_CODE } from '@/data/countries';
 import type { NewsItem, RoomState } from '@/types';
 
-const ATTACK_TTL_MS = 12_000; // animations play for ~12 seconds after the event
+const ATTACK_TTL_MS = 14_000;
 
-// Iron Dome shields: animated translucent circles over the capitals of
-// players whose dome is currently active. Render inside a MapContainer.
+// Iron Dome shields over active defenders' centroids.
 export function IronDomeOverlay({ room }: { room: RoomState }) {
-  // Read current day from the rendered clock; we don't have a hook here so use
-  // a quick computation. Components driving this overlay pass the room snapshot
-  // and we just check activeUntilDay vs now-day via startedAt.
   const day = useCurrentDay(room);
-
   const domes = useMemo(() => {
     return Object.values(room.players)
       .filter((p) => p.countryCode && p.ironDome.activeUntilDay >= day && p.ironDome.activeUntilDay > 0)
-      .map((p) => ({
-        uid: p.uid,
-        center: COUNTRY_BY_CODE[p.countryCode!]?.center ?? null,
-      }))
+      .map((p) => ({ uid: p.uid, center: COUNTRY_BY_CODE[p.countryCode!]?.center ?? null }))
       .filter((d) => d.center !== null);
   }, [room.players, day]);
 
@@ -31,26 +23,32 @@ export function IronDomeOverlay({ room }: { room: RoomState }) {
           key={d.uid}
           center={d.center as [number, number]}
           radius={900_000}
-          pathOptions={{ color: '#60a5fa', weight: 1.5, fillColor: '#60a5fa', fillOpacity: 0.25, className: 'dome-pulse' }}
+          pathOptions={{
+            color: '#60a5fa',
+            weight: 1.5,
+            fillColor: '#60a5fa',
+            fillOpacity: 0.25,
+            className: 'dome-pulse',
+          }}
         />
       ))}
     </>
   );
 }
 
-// Attack route polylines: draw the most recent attack events on the map.
-// Each line is an arc from attacker capital to target country with a
-// CSS-animated dash pattern. After ATTACK_TTL_MS, lines fade out.
+// Live attack visualisation: route polyline + launcher pulse + impact badge.
+// Drives off recent news items (kind 'attack' or 'nuke') with routeFrom/routeTo
+// in meta. Each event renders for ~14 seconds then disappears.
 export function AttackRoutes({ news }: { news: NewsItem[] }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
+    const id = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(id);
   }, []);
 
   const recent = useMemo(() => {
     return news.filter((n) => {
-      if (n.kind !== 'attack' && n.kind !== 'nuke') return false;
+      if (n.kind !== 'attack' && n.kind !== 'nuke' && n.kind !== 'intercept') return false;
       const age = now - n.createdAt;
       if (age > ATTACK_TTL_MS) return false;
       const from = n.meta?.routeFrom as string | undefined;
@@ -66,26 +64,73 @@ export function AttackRoutes({ news }: { news: NewsItem[] }) {
         const from = COUNTRY_BY_CODE[n.meta!.routeFrom as string].center;
         const to = COUNTRY_BY_CODE[n.meta!.routeTo as string].center;
         const isNuke = n.kind === 'nuke';
+        const isIntercept = n.kind === 'intercept';
+        const lineColor = isNuke ? '#fbbf24' : isIntercept ? '#60a5fa' : '#ef4444';
+        const dmg = (n.meta?.dmg as number | undefined) ?? 0;
+
         return (
-          <Polyline
-            key={n.id}
-            positions={[from, to]}
-            pathOptions={{
-              color: isNuke ? '#fbbf24' : '#ef4444',
-              weight: isNuke ? 4 : 2.5,
-              dashArray: '10 8',
-              opacity: 0.95,
-              className: 'attack-dash',
-            }}
-          />
+          <Fragment key={n.id}>
+            {/* Route arc */}
+            <Polyline
+              positions={[from, to]}
+              pathOptions={{
+                color: lineColor,
+                weight: isNuke ? 5 : 3,
+                dashArray: '10 8',
+                opacity: 0.95,
+                className: 'attack-dash',
+              }}
+            />
+            {/* Launch glow at source */}
+            <CircleMarker
+              center={from}
+              radius={9}
+              pathOptions={{
+                color: lineColor,
+                fillColor: lineColor,
+                fillOpacity: 0.6,
+                weight: 2,
+                className: 'launch-pulse',
+              }}
+            />
+            {/* Impact rings at target */}
+            <CircleMarker
+              center={to}
+              radius={14}
+              pathOptions={{
+                color: lineColor,
+                fillColor: lineColor,
+                fillOpacity: 0.15,
+                weight: 2,
+                className: 'impact-ring',
+              }}
+            />
+            <CircleMarker
+              center={to}
+              radius={8}
+              pathOptions={{
+                color: lineColor,
+                fillColor: lineColor,
+                fillOpacity: 0.9,
+                weight: 1,
+              }}
+            >
+              {/* Damage label that pops up over the target */}
+              <Tooltip permanent direction="top" offset={[0, -8]} className="impact-pop">
+                {isIntercept
+                  ? '🛡️ Intercepted'
+                  : isNuke
+                  ? `☢️ ${dmg.toLocaleString()} dmg`
+                  : `💥 ${dmg.toLocaleString()} dmg`}
+              </Tooltip>
+            </CircleMarker>
+          </Fragment>
         );
       })}
     </>
   );
 }
 
-// Read the day from room without re-importing the timer logic; lightweight
-// because we only need an integer. Falls back to 1 if startedAt is null.
 function useCurrentDay(room: RoomState): number {
   return useMemo(() => {
     const s = room.startedAt;
@@ -103,7 +148,7 @@ function useCurrentDay(room: RoomState): number {
   }, [room.startedAt, room.dayLengthMs]);
 }
 
-// Pin markers for the player's army camps. Tooltip shows HP and garrison.
+// Camp pins (yellow for yours, grey for others).
 export function CampPins({ room, viewerUid }: { room: RoomState; viewerUid: string | null }) {
   const map = useMap();
   useEffect(() => {

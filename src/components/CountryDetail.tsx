@@ -4,6 +4,7 @@ import { COUNTRY_BY_CODE, type CountryDef } from '@/data/countries';
 import { relationshipRating, relationshipLabel } from '@/game/relationships';
 import { CAMP_COST, MAX_CAMPS_PER_COUNTRY, canDeployCampIn, campsInCountry, makeCamp } from '@/game/camps';
 import { listOffers, isMarketAccessible } from '@/game/market';
+import { UNIT_BY_KEY } from '@/game/army';
 import { patchPlayer, postNews } from '@/firebase/rooms';
 import type { PlayerState, RoomState } from '@/types';
 
@@ -66,7 +67,8 @@ export function CountryDetail({ open, onClose, countryCode, room, me, day, onAtt
     if (me.money < price) return;
     setBusy(true);
     try {
-      const nextArmy = { ...me.army, [unitKey]: me.army[unitKey] + 1 };
+      const batch = UNIT_BY_KEY[unitKey].batchSize;
+      const nextArmy = { ...me.army, [unitKey]: me.army[unitKey] + batch };
       await patchPlayer(room.id, me.uid, {
         money: me.money - price,
         army: nextArmy,
