@@ -50,7 +50,7 @@ export function blankPlayer(uid: string, name: string): PlayerState {
     money: 1000,
     innovation: startingInnovation(perks),
     army: { ...emptyArmy(), ...startingArmy(perks) },
-    capital: { hp: 10000, maxHp: 10000 },
+    capital: { hp: 100, maxHp: 100 },
     territories: [],
     daily: { speechUsed: false, lastResetDay: 0 },
     camps: [],

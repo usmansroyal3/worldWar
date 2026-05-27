@@ -2,7 +2,7 @@ import { nanoid } from 'nanoid';
 import { COUNTRY_BY_CODE } from '@/data/countries';
 import type { PendingNuke, PlayerState, RoomState } from '@/types';
 
-export const NUKE_CAPITAL_DMG = 2000;
+export const NUKE_CAPITAL_DMG = 60;
 export const NUKE_MIN_MORALE = 95;
 export const NUKE_MIN_REPUTATION = 95;
 export const NUKE_REP_DROP_SOLO_PCT = 0.45;

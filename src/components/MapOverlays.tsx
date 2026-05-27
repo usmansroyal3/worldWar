@@ -91,14 +91,16 @@ export function CapitalPins({ room, viewerUid }: { room: RoomState; viewerUid: s
       if (!p.countryCode) return;
       const def = COUNTRY_BY_CODE[p.countryCode];
       if (!def) return;
-      const hpPct = Math.max(0, Math.min(100, (p.capital.hp / p.capital.maxHp) * 100));
+      const hp = Math.round(p.capital.hp);
+      const maxHp = Math.round(p.capital.maxHp);
+      const hpPct = Math.max(0, Math.min(100, (hp / maxHp) * 100));
       const color = hpPct > 50 ? '#22c55e' : hpPct > 25 ? '#f59e0b' : '#ef4444';
       const isMine = p.uid === viewerUid;
-      const eliminated = p.capital.hp <= 0;
+      const eliminated = hp <= 0;
 
       const html = `
         <div class="capital-pin ${isMine ? 'mine' : ''} ${eliminated ? 'eliminated' : ''}" style="--c:${color}">
-          <div class="capital-pin-label">${eliminated ? '💀 DOWN' : `🏛️ ${p.capital.hp.toLocaleString()}`}</div>
+          <div class="capital-pin-label">${eliminated ? '💀 DOWN' : `🏛️ ${hp} / ${maxHp}`}</div>
           <div class="capital-pin-bar"><div style="width:${hpPct}%"></div></div>
           <div class="capital-pin-name">${escapeHtml(p.name)}</div>
         </div>`;
@@ -106,12 +108,13 @@ export function CapitalPins({ room, viewerUid }: { room: RoomState; viewerUid: s
       const icon = L.divIcon({
         html,
         className: 'capital-pin-wrap',
-        iconSize: [110, 38],
-        iconAnchor: [55, -6], // sit just below the country centroid
+        iconSize: [130, 46],
+        // anchor at top-middle so the badge hangs DOWN from the country centroid
+        iconAnchor: [65, 0],
       });
-      const marker = L.marker(def.center, { icon, interactive: true });
+      const marker = L.marker(def.center, { icon, interactive: true, zIndexOffset: 500 });
       marker.bindTooltip(
-        `<b>${escapeHtml(p.name)}</b> · ${escapeHtml(def.name)}<br>Capital HP: ${p.capital.hp.toLocaleString()} / ${p.capital.maxHp.toLocaleString()} (${Math.round(hpPct)}%)<br>${eliminated ? '<span style="color:#ef4444">ELIMINATED</span>' : `${(p.capital.maxHp - p.capital.hp).toLocaleString()} dmg taken · ${p.capital.hp.toLocaleString()} to KO`}`,
+        `<b>${escapeHtml(p.name)}</b> · ${escapeHtml(def.name)}<br>Capital HP: ${hp} / ${maxHp} (${Math.round(hpPct)}%)<br>${eliminated ? '<span style="color:#ef4444">ELIMINATED</span>' : `${(maxHp - hp)} dmg taken · ${hp} to KO`}`,
         { sticky: true, direction: 'top' }
       );
       marker.addTo(layer);

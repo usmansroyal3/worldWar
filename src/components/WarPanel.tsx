@@ -282,6 +282,7 @@ export function WarPanel({ room, me, day }: Props) {
         <div className="text-xs text-muted mt-3 space-y-1">
           <div>One buy = {UNITS.find((u) => u.key === 'infantry')!.batchSize.toLocaleString()} infantry / {UNITS.find((u) => u.key === 'tanks')!.batchSize} tanks. Other units come 1 per buy.</div>
           <div>Stealth bypasses 50% of air defense. Iron Dome intercepts missiles at ${MISSILE_INTERCEPT_COST}M per attempt (defender pays).</div>
+          <div>Capital HP starts at 100. Reduce to 0 to eliminate the enemy.</div>
         </div>
       </div>
 

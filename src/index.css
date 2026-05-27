@@ -197,35 +197,35 @@ body {
 /* ─── Capital HP pins ─────────────────────────────────────────── */
 .capital-pin-wrap { background: none !important; border: 0 !important; }
 .capital-pin {
-  background: rgba(11, 18, 32, 0.94);
-  border: 1.5px solid var(--c);
-  border-radius: 7px;
-  padding: 3px 6px 4px;
+  background: rgba(11, 18, 32, 0.96);
+  border: 2px solid var(--c);
+  border-radius: 8px;
+  padding: 4px 8px 5px;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 11px;
-  line-height: 1.1;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.55);
+  font-size: 13px;
+  line-height: 1.15;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.4);
   white-space: nowrap;
   pointer-events: auto;
   width: 100%;
   text-align: center;
 }
 .capital-pin.mine {
-  outline: 2px solid rgba(59,130,246,0.55);
-  outline-offset: 1px;
+  outline: 2px solid rgba(59,130,246,0.7);
+  outline-offset: 2px;
 }
 .capital-pin.eliminated {
   opacity: 0.6;
   filter: grayscale(0.6);
 }
-.capital-pin-label { color: var(--c); font-weight: 700; }
-.capital-pin-name  { color: #94a3b8; font-size: 9px; font-weight: 500; letter-spacing: 0.5px; }
+.capital-pin-label { color: var(--c); font-weight: 700; font-size: 13px; }
+.capital-pin-name  { color: #cbd5e1; font-size: 10px; font-weight: 600; letter-spacing: 0.3px; margin-top: 1px; }
 .capital-pin-bar {
   width: 100%;
-  height: 3px;
-  background: rgba(255,255,255,0.12);
+  height: 4px;
+  background: rgba(255,255,255,0.15);
   border-radius: 2px;
-  margin: 2px 0;
+  margin: 3px 0;
   overflow: hidden;
 }
 .capital-pin-bar > div {
