@@ -3,6 +3,7 @@ import { X, Loader2 } from 'lucide-react';
 import { SPEECH_OPTIONS, applySpeech } from '@/game/speech';
 import { COUNTRY_BY_CODE } from '@/data/countries';
 import { patchPlayer, postNews } from '@/firebase/rooms';
+import { sfx } from '@/lib/sound';
 import type { PlayerState, RoomState, SpeechKind } from '@/types';
 
 interface Props {
@@ -25,12 +26,14 @@ export function SpeechModal({ open, onClose, room, me, day }: Props) {
   async function deliver() {
     if (!selected) return;
     setBusy(true);
+    sfx.speech();
     try {
       const fx = applySpeech(me, selected);
       await patchPlayer(room.id, me.uid, {
         morale: Math.max(0, Math.min(100, me.morale + fx.morale)),
         reputation: Math.max(0, Math.min(100, me.reputation + fx.reputation)),
         daily: { speechUsed: true, lastResetDay: day },
+        totals: { ...me.totals, speechesGiven: me.totals.speechesGiven + 1 },
       });
       if (publish) {
         await postNews(room.id, {

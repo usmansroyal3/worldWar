@@ -3,6 +3,7 @@ import { X, Loader2, Skull } from 'lucide-react';
 import { COUNTRIES_BY_NAME, COUNTRY_BY_CODE } from '@/data/countries';
 import { allianceMembers, canLaunchNuke, isProposalApproved, makeProposal, applyReputationDrop, NUKE_CAPITAL_DMG } from '@/game/nuclear';
 import { approveNuke, cancelNuke, patchPlayer, postNews, proposeNuke } from '@/firebase/rooms';
+import { sfx } from '@/lib/sound';
 import type { PendingNuke, PlayerState, RoomState } from '@/types';
 
 interface Props {
@@ -60,10 +61,12 @@ export function NukeLauncher({ open, onClose, room, me, day }: Props) {
     const targetPlayer = Object.values(room.players).find((p) => p.countryCode === targetCode);
     const tasks: Promise<unknown>[] = [];
 
+    sfx.nuke();
     tasks.push(
       patchPlayer(room.id, me.uid, {
         army: { ...me.army, nukes: me.army.nukes - 1 },
         reputation: newRep,
+        totals: { ...me.totals, nukesLaunched: me.totals.nukesLaunched + 1, damageDealt: me.totals.damageDealt + NUKE_CAPITAL_DMG },
       })
     );
     if (targetPlayer) {

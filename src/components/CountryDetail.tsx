@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
-import { X, Globe2, Shield, ShoppingCart, Crosshair, MapPin, Loader2 } from 'lucide-react';
+import { X, Globe2, Shield, ShoppingCart, Crosshair, MapPin, Loader2, Eye } from 'lucide-react';
 import { COUNTRY_BY_CODE, type CountryDef } from '@/data/countries';
 import { relationshipRating, relationshipLabel } from '@/game/relationships';
 import { CAMP_COST, MAX_CAMPS_PER_COUNTRY, canDeployCampIn, campsInCountry, makeCamp } from '@/game/camps';
 import { listOffers, isMarketAccessible } from '@/game/market';
 import { UNIT_BY_KEY } from '@/game/army';
 import { patchPlayer, postNews } from '@/firebase/rooms';
+import { DiplomacyPanel } from './DiplomacyPanel';
+import { SpyModal } from './SpyModal';
 import type { PlayerState, RoomState } from '@/types';
 
 interface Props {
@@ -21,6 +23,7 @@ interface Props {
 export function CountryDetail({ open, onClose, countryCode, room, me, day, onAttack }: Props) {
   const [tab, setTab] = useState<'info' | 'camps' | 'market'>('info');
   const [busy, setBusy] = useState(false);
+  const [spying, setSpying] = useState(false);
 
   if (!open || !countryCode) return null;
 
@@ -134,6 +137,14 @@ export function CountryDetail({ open, onClose, countryCode, room, me, day, onAtt
                   )}
                 </div>
               )}
+              {owner && owner.uid !== me.uid && (
+                <div className="mt-2 space-y-2">
+                  <DiplomacyPanel room={room} me={me} other={owner} day={day} />
+                  <button className="btn-secondary w-full text-xs" onClick={() => setSpying(true)}>
+                    <Eye className="w-3.5 h-3.5" /> Run intelligence on {owner.name}
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -167,6 +178,16 @@ export function CountryDetail({ open, onClose, countryCode, room, me, day, onAtt
           </div>
         )}
       </div>
+      {owner && owner.uid !== me.uid && (
+        <SpyModal
+          open={spying}
+          onClose={() => setSpying(false)}
+          room={room}
+          me={me}
+          target={owner}
+          day={day}
+        />
+      )}
     </div>
   );
 }

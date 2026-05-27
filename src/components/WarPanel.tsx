@@ -4,9 +4,11 @@ import { UNITS, type UnitDef } from '@/game/army';
 import { COUNTRIES_BY_NAME, COUNTRY_BY_CODE } from '@/data/countries';
 import { getRelationship } from '@/game/relationships';
 import { hasGroundReachTo } from '@/game/camps';
-import { postNews } from '@/firebase/rooms';
+import { captureTerritory, postNews } from '@/firebase/rooms';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/firebase/config';
+import { getStatus, WAR_BREAK_REP_PENALTY } from '@/game/diplomacy2';
+import { sfx } from '@/lib/sound';
 import type { ArmyState, PlayerState, RoomState } from '@/types';
 import { NukeLauncher } from './NukeLauncher';
 import { IronDomeModal } from './IronDomeModal';
@@ -88,6 +90,7 @@ export function WarPanel({ room, me, day }: Props) {
   async function launch() {
     if (!target || !me.countryCode || !preview.committedAny) return;
     setBusy(true);
+    sfx.launch();
     try {
       // Resolve per-unit-type damage with stochastic intercepts.
       const updates: Record<string, unknown> = {};
@@ -134,13 +137,39 @@ export function WarPanel({ room, me, day }: Props) {
         totalDealt += dmg;
       }
 
-      // Patch attacker (army down)
+      // Patch attacker (army down + totals + fatigue)
       updates[`players.${me.uid}.army`] = nextArmy;
+      updates[`players.${me.uid}.fatigueToday`] = (me.fatigueToday ?? 0) + totalDealt;
+      updates[`players.${me.uid}.totals`] = {
+        ...me.totals,
+        damageDealt: me.totals.damageDealt + totalDealt,
+      };
 
-      // Patch defender (capital HP, dome counters, money)
+      // Diplomatic surprise-attack penalty
+      if (targetPlayer) {
+        const status = getStatus(room, me.uid, targetPlayer.uid);
+        if (status === 'peace' || status === 'ceasefire') {
+          const penalty = status === 'ceasefire' ? 40 : WAR_BREAK_REP_PENALTY;
+          updates[`players.${me.uid}.reputation`] = Math.max(0, Math.round(me.reputation - penalty));
+          updates[`diplomacy.${[me.uid, targetPlayer.uid].sort().join('__')}`] = {
+            status: 'war', declaredAt: Date.now(), declaredBy: me.uid,
+          };
+        }
+      }
+
+      // Patch defender (capital HP, dome counters, money, damage-taken tally)
+      let defenderKO = false;
       if (targetPlayer) {
         const newHp = Math.max(0, targetPlayer.capital.hp - totalDealt);
+        defenderKO = newHp <= 0 && targetPlayer.capital.hp > 0;
         updates[`players.${targetPlayer.uid}.capital`] = { ...targetPlayer.capital, hp: newHp };
+        updates[`players.${targetPlayer.uid}.totals`] = {
+          ...targetPlayer.totals,
+          damageTaken: targetPlayer.totals.damageTaken + totalDealt,
+        };
+        if (newHp <= 0) {
+          updates[`players.${targetPlayer.uid}.eliminated`] = true;
+        }
         if (domeIntercepts > 0) {
           updates[`players.${targetPlayer.uid}.ironDome`] = {
             ...targetPlayer.ironDome,
@@ -152,6 +181,26 @@ export function WarPanel({ room, me, day }: Props) {
 
       // Apply all writes in one patch (single Firestore doc update)
       if (db) await updateDoc(doc(db, 'rooms', room.id), updates);
+
+      // If we KO'd a player capital AND there was any ground commit, capture
+      // their home country.
+      if (defenderKO && targetPlayer && (unitsCommitted.infantry || unitsCommitted.tanks)) {
+        sfx.capture();
+        await captureTerritory(room.id, me.uid, target, targetPlayer.uid);
+        await postNews(room.id, {
+          authorId: me.uid,
+          authorName: me.name,
+          authorCountry: me.countryCode,
+          day,
+          kind: 'capture',
+          title: `🏴 ${COUNTRY_BY_CODE[me.countryCode!]?.name} captures ${COUNTRY_BY_CODE[target]?.name}`,
+          body: `${targetPlayer.name}'s capital has fallen. Their territory now belongs to ${me.name}.`,
+          meta: { capturedCode: target, formerOwnerUid: targetPlayer.uid },
+        });
+      } else if (totalDealt > 0) {
+        sfx.impact();
+      }
+      if (domeIntercepts > 0) sfx.intercept();
 
       // News + animation event
       await postNews(room.id, {

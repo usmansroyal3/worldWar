@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Megaphone, Map as MapIcon, Newspaper, Swords, Hammer, Trophy, HelpCircle, ShoppingCart, Shield, FastForward, Loader2 } from 'lucide-react';
+import { Megaphone, Map as MapIcon, Newspaper, Swords, Hammer, Trophy, HelpCircle, ShoppingCart, Shield, FastForward, Loader2, MessageSquare, Clock } from 'lucide-react';
 import { useGameClock } from '@/hooks/useGameClock';
 import { useNews } from '@/hooks/useRoom';
 import { useDailyTick } from '@/hooks/useDailyTick';
 import { formatCountdown } from '@/game/timer';
 import { COUNTRY_BY_CODE } from '@/data/countries';
-import { fastForwardOneDay } from '@/firebase/rooms';
+import { fastForwardOneDay, endRoom } from '@/firebase/rooms';
 import { WorldMap } from './WorldMap';
 import { StatBar } from './StatBar';
 import { SpeechModal } from './SpeechModal';
@@ -20,9 +20,13 @@ import { CampsTab } from './CampsTab';
 import { CampPins, CapitalPins, IronDomeOverlay } from './MapOverlays';
 import { BattleLayer } from './BattleLayer';
 import { BattleToasts } from './BattleToasts';
+import { AllianceChat } from './AllianceChat';
+import { Timeline } from './Timeline';
+import { EndGameScreen } from './EndGameScreen';
+import { SoundToggle } from './SoundToggle';
 import type { PlayerState, RoomState } from '@/types';
 
-type Tab = 'map' | 'build' | 'camps' | 'market' | 'strike' | 'news' | 'standings';
+type Tab = 'map' | 'build' | 'camps' | 'market' | 'strike' | 'news' | 'chat' | 'timeline' | 'standings';
 
 export function GameView({ room, me, isAdmin }: { room: RoomState; me: PlayerState; isAdmin: boolean }) {
   const clock = useGameClock(room);
@@ -33,12 +37,27 @@ export function GameView({ room, me, isAdmin }: { room: RoomState; me: PlayerSta
   const [detailCode, setDetailCode] = useState<string | null>(null);
   const [ffBusy, setFfBusy] = useState(false);
 
-  useDailyTick(room.id, me, clock?.day ?? null);
+  useDailyTick(room.id, me, room, clock?.day ?? null, isAdmin);
 
   useEffect(() => {
     if (shouldShowTutorial()) setTutorial(true);
   }, []);
 
+  // Admin auto-transitions room to 'ended' once the game clock has rolled past
+  // the final day. Single client owns the write to avoid stampedes.
+  useEffect(() => {
+    if (!isAdmin || !clock) return;
+    if (room.status === 'ended') return;
+    if (clock.phase === 'ended') {
+      endRoom(room.id).catch(() => {});
+    }
+  }, [isAdmin, clock?.phase, room.status, room.id]);
+
+  // End-game screen takes precedence over everything else
+  if (room.status === 'ended') {
+    return <EndGameScreen room={room} me={me} />;
+  }
+  // Auto-flip to ended when clock has fully expired (admin will write status)
   if (!clock) {
     return <div className="p-6 text-muted">Loading game clock...</div>;
   }
@@ -58,6 +77,8 @@ export function GameView({ room, me, isAdmin }: { room: RoomState; me: PlayerSta
     { id: 'market', icon: <ShoppingCart className="w-4 h-4" />, label: 'Market' },
     { id: 'strike', icon: <Swords className="w-4 h-4" />, label: 'War', disabled: clock.phase !== 'war' },
     { id: 'news', icon: <Newspaper className="w-4 h-4" />, label: 'News' },
+    { id: 'chat', icon: <MessageSquare className="w-4 h-4" />, label: 'Chat', disabled: !me.allianceId },
+    { id: 'timeline', icon: <Clock className="w-4 h-4" />, label: 'Timeline' },
     { id: 'standings', icon: <Trophy className="w-4 h-4" />, label: 'Standings' },
   ];
 
@@ -103,6 +124,7 @@ export function GameView({ room, me, isAdmin }: { room: RoomState; me: PlayerSta
               {ffBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <FastForward className="w-4 h-4" />}
             </button>
           )}
+          <SoundToggle />
           <button
             className="p-2 rounded-lg text-muted hover:bg-panel2 hover:text-ink"
             onClick={() => setTutorial(true)}
@@ -181,6 +203,16 @@ export function GameView({ room, me, isAdmin }: { room: RoomState; me: PlayerSta
         {tab === 'news' && (
           <div className="p-3">
             <NewsFeed room={room} me={me} news={news} />
+          </div>
+        )}
+        {tab === 'chat' && (
+          <div className="p-3">
+            <AllianceChat room={room} me={me} />
+          </div>
+        )}
+        {tab === 'timeline' && (
+          <div className="p-3">
+            <Timeline room={room} news={news} currentDay={clock.day} />
           </div>
         )}
         {tab === 'standings' && (
