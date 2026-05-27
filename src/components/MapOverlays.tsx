@@ -79,3 +79,48 @@ export function CampPins({ room, viewerUid }: { room: RoomState; viewerUid: stri
   }, [room.players, map, viewerUid]);
   return null;
 }
+
+// Capital HP pins — every player-owned country gets a labeled HP badge at its
+// centroid so everyone can see at a glance how much damage each side has
+// left before elimination.
+export function CapitalPins({ room, viewerUid }: { room: RoomState; viewerUid: string | null }) {
+  const map = useMap();
+  useEffect(() => {
+    const layer = L.layerGroup().addTo(map);
+    Object.values(room.players).forEach((p) => {
+      if (!p.countryCode) return;
+      const def = COUNTRY_BY_CODE[p.countryCode];
+      if (!def) return;
+      const hpPct = Math.max(0, Math.min(100, (p.capital.hp / p.capital.maxHp) * 100));
+      const color = hpPct > 50 ? '#22c55e' : hpPct > 25 ? '#f59e0b' : '#ef4444';
+      const isMine = p.uid === viewerUid;
+      const eliminated = p.capital.hp <= 0;
+
+      const html = `
+        <div class="capital-pin ${isMine ? 'mine' : ''} ${eliminated ? 'eliminated' : ''}" style="--c:${color}">
+          <div class="capital-pin-label">${eliminated ? '💀 DOWN' : `🏛️ ${p.capital.hp.toLocaleString()}`}</div>
+          <div class="capital-pin-bar"><div style="width:${hpPct}%"></div></div>
+          <div class="capital-pin-name">${escapeHtml(p.name)}</div>
+        </div>`;
+
+      const icon = L.divIcon({
+        html,
+        className: 'capital-pin-wrap',
+        iconSize: [110, 38],
+        iconAnchor: [55, -6], // sit just below the country centroid
+      });
+      const marker = L.marker(def.center, { icon, interactive: true });
+      marker.bindTooltip(
+        `<b>${escapeHtml(p.name)}</b> · ${escapeHtml(def.name)}<br>Capital HP: ${p.capital.hp.toLocaleString()} / ${p.capital.maxHp.toLocaleString()} (${Math.round(hpPct)}%)<br>${eliminated ? '<span style="color:#ef4444">ELIMINATED</span>' : `${(p.capital.maxHp - p.capital.hp).toLocaleString()} dmg taken · ${p.capital.hp.toLocaleString()} to KO`}`,
+        { sticky: true, direction: 'top' }
+      );
+      marker.addTo(layer);
+    });
+    return () => { layer.remove(); };
+  }, [room.players, map, viewerUid]);
+  return null;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] ?? c));
+}

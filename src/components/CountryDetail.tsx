@@ -112,10 +112,26 @@ export function CountryDetail({ open, onClose, countryCode, room, me, day, onAtt
                 <span className="font-mono text-sm" style={{ color: ratingColor }}>{Math.round(rating)}</span>
               </div>
               <div className="text-xs text-muted mt-1">&gt;75 friendly · 40–75 neutral · &lt;40 enemy</div>
-              {owner && owner.uid !== me.uid && (
-                <div className="mt-2 text-sm">
-                  Controlled by <span className="font-semibold">{owner.name}</span>
-                  {owner.allianceId && room.alliances[owner.allianceId] ? <> · {room.alliances[owner.allianceId].name}</> : null}
+              {owner && (
+                <div className="mt-3 panel-2 p-2">
+                  <div className="flex items-baseline justify-between mb-1">
+                    <span className="text-xs uppercase tracking-wider text-muted">
+                      🏛️ Capital HP {owner.uid === me.uid ? '(yours)' : `· ${owner.name}`}
+                    </span>
+                    <span className="font-mono text-xs" style={{ color: hpColor(owner.capital.hp, owner.capital.maxHp) }}>
+                      {owner.capital.hp.toLocaleString()} / {owner.capital.maxHp.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="stat-bar">
+                    <div className="h-full" style={{ width: `${Math.max(0, Math.min(100, (owner.capital.hp / owner.capital.maxHp) * 100))}%`, background: hpColor(owner.capital.hp, owner.capital.maxHp) }} />
+                  </div>
+                  <div className="flex justify-between text-[10px] text-muted mt-1">
+                    <span>{(owner.capital.maxHp - owner.capital.hp).toLocaleString()} dmg taken</span>
+                    <span>{owner.capital.hp <= 0 ? 'ELIMINATED' : `${owner.capital.hp.toLocaleString()} dmg to eliminate`}</span>
+                  </div>
+                  {owner.uid !== me.uid && owner.allianceId && room.alliances[owner.allianceId] && (
+                    <div className="text-xs text-muted mt-1">Alliance: {room.alliances[owner.allianceId].name}</div>
+                  )}
                 </div>
               )}
             </>
@@ -265,6 +281,13 @@ function MarketPanel({ offers, me, onBuy, busy }: { offers: ReturnType<typeof li
       })}
     </div>
   );
+}
+
+function hpColor(hp: number, maxHp: number): string {
+  const pct = (hp / maxHp) * 100;
+  if (pct > 50) return '#22c55e';
+  if (pct > 25) return '#f59e0b';
+  return '#ef4444';
 }
 
 function Stat({ label, value }: { label: string; value: string }) {

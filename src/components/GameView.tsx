@@ -17,7 +17,7 @@ import { BhairavaTutorial, shouldShowTutorial } from './BhairavaTutorial';
 import { CountryDetail } from './CountryDetail';
 import { MarketView } from './MarketView';
 import { CampsTab } from './CampsTab';
-import { CampPins, IronDomeOverlay } from './MapOverlays';
+import { CampPins, CapitalPins, IronDomeOverlay } from './MapOverlays';
 import { BattleLayer } from './BattleLayer';
 import { BattleToasts } from './BattleToasts';
 import type { PlayerState, RoomState } from '@/types';
@@ -71,6 +71,7 @@ export function GameView({ room, me, isAdmin }: { room: RoomState; me: PlayerSta
       <IronDomeOverlay room={room} />
       <BattleLayer news={news} />
       <CampPins room={room} viewerUid={me.uid} />
+      <CapitalPins room={room} viewerUid={me.uid} />
     </>
   );
 
