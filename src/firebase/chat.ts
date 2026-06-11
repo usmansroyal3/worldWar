@@ -1,5 +1,5 @@
 import {
-  addDoc, collection, onSnapshot, orderBy, query, where, type Unsubscribe,
+  addDoc, collection, onSnapshot, query, where, type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from './config';
 
@@ -36,10 +36,13 @@ export function watchChat(
   cb: (msgs: ChatMessage[]) => void,
 ): Unsubscribe {
   const col = collection(requireDb(), 'rooms', roomCode.toUpperCase(), 'alliance-chat');
-  const q = query(col, where('allianceId', '==', allianceId), orderBy('createdAt', 'asc'));
+  // No orderBy in the query: where + orderBy on different fields needs a
+  // composite index (silent empty results until created). Sort client-side.
+  const q = query(col, where('allianceId', '==', allianceId));
   return onSnapshot(q, (snap) => {
     const out: ChatMessage[] = [];
     snap.forEach((d) => out.push({ id: d.id, ...(d.data() as Omit<ChatMessage, 'id'>) }));
+    out.sort((a, b) => a.createdAt - b.createdAt);
     cb(out);
   });
 }

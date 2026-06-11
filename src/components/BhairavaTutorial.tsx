@@ -107,6 +107,7 @@ export function BhairavaTutorial({ open, onClose, room, me }: Props) {
       lines: [
         { speaker: 'b', text: `For the next ${room.prepDays} days — that's ${room.prepDays} real-world days — we prepare.` },
         { speaker: 'b', text: `Open the BUILD tab. Spend treasury on infantry, tanks, fighters, Rafales, stealth squadrons, ships, submarines, and missiles.` },
+        { speaker: 'b', text: `Production takes TIME — and the factory floor runs on morale. Keep the people happy and a fighter rolls out in hours; let morale collapse and the same order crawls.` },
         { speaker: 'b', text: `Don't forget defenses: air defense, fortifications, and the IRON DOME. The dome is our costliest weapon, but it intercepts incoming missiles — even nuclear ones — at the cost of one missile per intercept.` },
         { speaker: 'b', text: `Visit MARKET to see what friendly nations are selling — often cheaper than building it ourselves.` },
       ],

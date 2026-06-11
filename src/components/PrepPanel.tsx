@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Hammer, Loader2, Shield, ShoppingCart, Lightbulb, Lock } from 'lucide-react';
+import { Hammer, Loader2, Shield, ShoppingCart, Lightbulb, Lock, Factory } from 'lucide-react';
 import { UNITS, unitCostFor } from '@/game/army';
 import { canBuildUnit, effectiveGain, RESEARCH_PROJECTS } from '@/game/innovation';
+import { buildDurationMs, buildSpeedFactor, formatBuildEta, makeBuildOrder } from '@/game/build';
 import { patchPlayer, postNews } from '@/firebase/rooms';
 import { COUNTRY_BY_CODE } from '@/data/countries';
 import { sfx } from '@/lib/sound';
@@ -12,6 +13,8 @@ interface Props {
   room: RoomState;
   me: PlayerState;
   day: number;
+  // Current game-elapsed ms, shared with useBuildQueue so countdowns match.
+  elapsedMs: number;
   onOpenMarket?: () => void;
 }
 
@@ -23,10 +26,13 @@ const SECTIONS: { id: import('@/game/army').UnitDef['category']; label: string }
   { id: 'defense', label: 'Defense' },
 ];
 
-export function PrepPanel({ room, me, day, onOpenMarket }: Props) {
+export function PrepPanel({ room, me, day, elapsedMs, onOpenMarket }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
   const [publish, setPublish] = useState(false);
   const [showDome, setShowDome] = useState(false);
+
+  const queue = me.buildQueue ?? [];
+  const speedFactor = buildSpeedFactor(me);
 
   async function build(unitKey: keyof ArmyState) {
     const unit = UNITS.find((u) => u.key === unitKey);
@@ -36,11 +42,13 @@ export function PrepPanel({ room, me, day, onOpenMarket }: Props) {
     const cost = unitCostFor(unit, me.perks);
     if (me.money < cost) return;
     setBusy(unitKey);
-    sfx.build();
+    sfx.click();
     try {
-      const nextArmy = { ...me.army, [unitKey]: me.army[unitKey] + unit.batchSize };
+      // Domestic production takes time — morale sets the pace. The order is
+      // delivered into the army by useBuildQueue when its timer completes.
+      const order = makeBuildOrder(unitKey, unit.batchSize, me, elapsedMs);
       await patchPlayer(room.id, me.uid, {
-        army: nextArmy,
+        buildQueue: [...queue, order],
         money: me.money - cost,
         totals: { ...me.totals, spentOnBuilds: me.totals.spentOnBuilds + cost },
       });
@@ -52,7 +60,7 @@ export function PrepPanel({ room, me, day, onOpenMarket }: Props) {
           day,
           kind: 'build',
           title: `${me.name} commissions ${unit.batchSize.toLocaleString()} ${unit.unitNoun ?? 'units'}`,
-          body: `${COUNTRY_BY_CODE[me.countryCode ?? '']?.name ?? 'A nation'} adds ${unit.batchSize.toLocaleString()} ${unit.unitNoun ?? 'units'} to its ${unit.label.toLowerCase()}.`,
+          body: `${COUNTRY_BY_CODE[me.countryCode ?? '']?.name ?? 'A nation'} starts production of ${unit.batchSize.toLocaleString()} ${unit.unitNoun ?? 'units'} (${unit.label.toLowerCase()}).`,
         });
       }
     } finally {
@@ -84,6 +92,38 @@ export function PrepPanel({ room, me, day, onOpenMarket }: Props) {
           <input type="checkbox" className="accent-accent" checked={publish} onChange={(e) => setPublish(e.target.checked)} />
           Announce builds in news (other leaders can inspire — and target you)
         </label>
+
+        <div className="panel-2 p-2 mb-3 text-xs flex items-center gap-2">
+          <Factory className="w-3.5 h-3.5 text-accent shrink-0" />
+          <span className="text-muted">
+            Production speed <span className="text-ink font-mono">{Math.round((1 / speedFactor) * 100)}%</span> — driven by
+            morale ({Math.round(me.morale)}). High morale builds faster.
+            {me.perks.includes('industrial') && <span className="text-good"> Industrial perk −25% time.</span>}
+          </span>
+        </div>
+
+        {queue.length > 0 && (
+          <div className="panel-2 p-3 mb-3">
+            <div className="text-xs uppercase tracking-wider text-muted mb-2">In production ({queue.length})</div>
+            <ul className="space-y-1.5">
+              {[...queue].sort((a, b) => a.readyAtElapsedMs - b.readyAtElapsedMs).map((o) => {
+                const unit = UNITS.find((u) => u.key === o.unitKey);
+                const remaining = o.readyAtElapsedMs - elapsedMs;
+                const total = o.readyAtElapsedMs - o.placedAtElapsedMs;
+                const pct = total > 0 ? Math.max(0, Math.min(100, ((total - remaining) / total) * 100)) : 100;
+                return (
+                  <li key={o.id} className="text-xs">
+                    <div className="flex items-baseline justify-between mb-0.5">
+                      <span>{unit?.emoji} {o.qty.toLocaleString()} {unit?.unitNoun ?? 'units'}</span>
+                      <span className="font-mono text-warn">{remaining <= 0 ? 'delivering...' : formatBuildEta(remaining)}</span>
+                    </div>
+                    <div className="stat-bar"><div className="h-full bg-accent" style={{ width: `${pct}%` }} /></div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
 
         {SECTIONS.map((section) => {
           const inSection = UNITS.filter((u) => u.category === section.id);
@@ -117,6 +157,7 @@ export function PrepPanel({ room, me, day, onOpenMarket }: Props) {
                         {u.capitalDmg > 0 && <span> · {u.capitalDmg} dmg/unit</span>}
                         {u.groundOnly && <span> · Ground only</span>}
                         {u.defensive && <span> · Defensive</span>}
+                        {!isNuke && <span> · ⏱ {formatBuildEta(buildDurationMs(u.key, me))}</span>}
                       </div>
                       {locked && <div className="text-xs text-warn mt-1">🔒 Needs Innovation ≥ {gate.need} (you have {me.innovation})</div>}
                       {u.description && <div className="text-xs text-muted mt-1 italic">{u.description}</div>}

@@ -4,7 +4,7 @@ import { UNITS, type UnitDef } from '@/game/army';
 import { COUNTRIES_BY_NAME, COUNTRY_BY_CODE } from '@/data/countries';
 import { getRelationship } from '@/game/relationships';
 import { hasGroundReachTo } from '@/game/camps';
-import { captureTerritory, postNews } from '@/firebase/rooms';
+import { captureTerritory, mergeEliminatedPlayer, postNews } from '@/firebase/rooms';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { getStatus, WAR_BREAK_REP_PENALTY } from '@/game/diplomacy2';
@@ -182,19 +182,24 @@ export function WarPanel({ room, me, day }: Props) {
       // Apply all writes in one patch (single Firestore doc update)
       if (db) await updateDoc(doc(db, 'rooms', room.id), updates);
 
-      // If we KO'd a player capital AND there was any ground commit, capture
-      // their home country.
-      if (defenderKO && targetPlayer && (unitsCommitted.infantry || unitsCommitted.tanks)) {
+      // KO handling: with a ground commit the home country is annexed; either
+      // way the defeated player is folded into the victor's side so their
+      // remaining population counts toward it.
+      if (defenderKO && targetPlayer) {
         sfx.capture();
-        await captureTerritory(room.id, me.uid, target, targetPlayer.uid);
+        const groundCommit = !!(unitsCommitted.infantry || unitsCommitted.tanks);
+        if (groundCommit) {
+          await captureTerritory(room.id, me.uid, target, targetPlayer.uid);
+        }
+        const allianceName = await mergeEliminatedPlayer(room.id, me.uid, targetPlayer.uid);
         await postNews(room.id, {
           authorId: me.uid,
           authorName: me.name,
           authorCountry: me.countryCode,
           day,
           kind: 'capture',
-          title: `🏴 ${COUNTRY_BY_CODE[me.countryCode!]?.name} captures ${COUNTRY_BY_CODE[target]?.name}`,
-          body: `${targetPlayer.name}'s capital has fallen. Their territory now belongs to ${me.name}.`,
+          title: `🏴 ${COUNTRY_BY_CODE[target]?.name} has fallen to ${COUNTRY_BY_CODE[me.countryCode!]?.name}`,
+          body: `${targetPlayer.name}'s capital is destroyed.${groundCommit ? ` Their homeland is annexed by ${me.name}.` : ''}${allianceName ? ` ${targetPlayer.name} is absorbed into ${allianceName}.` : ''}`,
           meta: { capturedCode: target, formerOwnerUid: targetPlayer.uid },
         });
       } else if (totalDealt > 0) {

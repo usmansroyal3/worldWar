@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { X, Loader2, Skull } from 'lucide-react';
 import { COUNTRIES_BY_NAME, COUNTRY_BY_CODE } from '@/data/countries';
 import { allianceMembers, canLaunchNuke, isProposalApproved, makeProposal, applyReputationDrop, NUKE_CAPITAL_DMG } from '@/game/nuclear';
-import { approveNuke, cancelNuke, patchPlayer, postNews, proposeNuke } from '@/firebase/rooms';
+import { approveNuke, cancelNuke, mergeEliminatedPlayer, patchPlayer, postNews, proposeNuke } from '@/firebase/rooms';
 import { sfx } from '@/lib/sound';
 import type { PendingNuke, PlayerState, RoomState } from '@/types';
 
@@ -69,12 +69,15 @@ export function NukeLauncher({ open, onClose, room, me, day }: Props) {
         totals: { ...me.totals, nukesLaunched: me.totals.nukesLaunched + 1, damageDealt: me.totals.damageDealt + NUKE_CAPITAL_DMG },
       })
     );
+    let nukeKO = false;
     if (targetPlayer) {
       const newHp = Math.max(0, targetPlayer.capital.hp - NUKE_CAPITAL_DMG);
+      nukeKO = newHp <= 0 && targetPlayer.capital.hp > 0;
       tasks.push(
         patchPlayer(room.id, targetPlayer.uid, {
           capital: { ...targetPlayer.capital, hp: newHp },
           morale: Math.max(0, targetPlayer.morale - 30),
+          totals: { ...targetPlayer.totals, damageTaken: targetPlayer.totals.damageTaken + NUKE_CAPITAL_DMG },
         })
       );
     }
@@ -91,6 +94,22 @@ export function NukeLauncher({ open, onClose, room, me, day }: Props) {
       })
     );
     await Promise.all(tasks);
+
+    // A nuclear KO doesn't annex land (no boots on the ground), but the
+    // defeated player is still folded into the victor's side.
+    if (nukeKO && targetPlayer) {
+      const allianceName = await mergeEliminatedPlayer(room.id, me.uid, targetPlayer.uid);
+      await postNews(room.id, {
+        authorId: me.uid,
+        authorName: me.name,
+        authorCountry: me.countryCode,
+        day,
+        kind: 'capture',
+        title: `🏴 ${COUNTRY_BY_CODE[targetCode]?.name} surrenders after nuclear strike`,
+        body: `${targetPlayer.name}'s capital is gone.${allianceName ? ` They are absorbed into ${allianceName}.` : ''}`,
+        meta: { formerOwnerUid: targetPlayer.uid },
+      });
+    }
   }
 
   async function approveProposal(p: PendingNuke) {

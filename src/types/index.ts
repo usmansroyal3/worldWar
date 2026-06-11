@@ -63,6 +63,17 @@ export interface IronDomeState {
   interceptsToday: number;  // counter that resets at end of day
 }
 
+// A unit purchase in production. Times are stored as GAME-ELAPSED ms
+// (now - room.startedAt) rather than wall-clock, so the admin fast-forward
+// button also completes pending builds — exactly like the day clock.
+export interface BuildOrder {
+  id: string;
+  unitKey: keyof ArmyState;
+  qty: number;              // batch size at time of purchase
+  placedAtElapsedMs: number;
+  readyAtElapsedMs: number;
+}
+
 export interface PlayerState {
   uid: string;
   name: string;
@@ -82,6 +93,8 @@ export interface PlayerState {
   // New systems
   camps: ArmyCamp[];
   ironDome: IronDomeState;
+  // Units in production — completed by useBuildQueue when their readyAt passes.
+  buildQueue: BuildOrder[];
   // War-fatigue accumulator: damage dealt today drives morale loss at day tick.
   fatigueToday: number;
   // Tracks total stats for MVP awards in the end-game screen.

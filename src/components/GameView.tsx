@@ -3,6 +3,7 @@ import { Megaphone, Map as MapIcon, Newspaper, Swords, Hammer, Trophy, HelpCircl
 import { useGameClock } from '@/hooks/useGameClock';
 import { useNews } from '@/hooks/useRoom';
 import { useDailyTick } from '@/hooks/useDailyTick';
+import { useBuildQueue } from '@/hooks/useBuildQueue';
 import { formatCountdown } from '@/game/timer';
 import { COUNTRY_BY_CODE } from '@/data/countries';
 import { fastForwardOneDay, endRoom } from '@/firebase/rooms';
@@ -38,6 +39,21 @@ export function GameView({ room, me, isAdmin }: { room: RoomState; me: PlayerSta
   const [ffBusy, setFfBusy] = useState(false);
 
   useDailyTick(room.id, me, room, clock?.day ?? null, isAdmin);
+  const elapsedMs = useBuildQueue(room, me);
+
+  // Unseen-news red dot: compare newest item timestamp against the last time
+  // this device viewed the News tab. Cleared when the tab is opened.
+  const newsSeenKey = `ww:newsSeen:${room.id}`;
+  const [newsSeenAt, setNewsSeenAt] = useState<number>(() => {
+    try { return Number(localStorage.getItem(newsSeenKey) ?? 0); } catch { return 0; }
+  });
+  const hasUnseenNews = news.some((n) => n.createdAt > newsSeenAt);
+  useEffect(() => {
+    if (tab !== 'news' || news.length === 0) return;
+    const t = Date.now();
+    try { localStorage.setItem(newsSeenKey, String(t)); } catch { /* ignore */ }
+    setNewsSeenAt(t);
+  }, [tab, news.length, newsSeenKey]);
 
   useEffect(() => {
     if (shouldShowTutorial()) setTutorial(true);
@@ -70,13 +86,13 @@ export function GameView({ room, me, isAdmin }: { room: RoomState; me: PlayerSta
       ? `${clock.day - clock.prepDays} / ${clock.warDays}`
       : 'Final';
 
-  const tabs: { id: Tab; icon: React.ReactNode; label: string; disabled?: boolean }[] = [
+  const tabs: { id: Tab; icon: React.ReactNode; label: string; disabled?: boolean; badge?: boolean }[] = [
     { id: 'map', icon: <MapIcon className="w-4 h-4" />, label: 'World' },
     { id: 'build', icon: <Hammer className="w-4 h-4" />, label: 'Build' },
     { id: 'camps', icon: <Shield className="w-4 h-4" />, label: 'Camps' },
     { id: 'market', icon: <ShoppingCart className="w-4 h-4" />, label: 'Market' },
     { id: 'strike', icon: <Swords className="w-4 h-4" />, label: 'War', disabled: clock.phase !== 'war' },
-    { id: 'news', icon: <Newspaper className="w-4 h-4" />, label: 'News' },
+    { id: 'news', icon: <Newspaper className="w-4 h-4" />, label: 'News', badge: hasUnseenNews },
     { id: 'chat', icon: <MessageSquare className="w-4 h-4" />, label: 'Chat', disabled: !me.allianceId },
     { id: 'timeline', icon: <Clock className="w-4 h-4" />, label: 'Timeline' },
     { id: 'standings', icon: <Trophy className="w-4 h-4" />, label: 'Standings' },
@@ -148,7 +164,13 @@ export function GameView({ room, me, isAdmin }: { room: RoomState; me: PlayerSta
                 tab === t.id ? 'text-accent border-b-2 border-accent' : 'text-muted border-b-2 border-transparent'
               }`}
             >
-              {t.icon}<span>{t.label}</span>
+              <span className="relative">
+                {t.icon}
+                {t.badge && (
+                  <span className="absolute -top-1 -right-1.5 w-2.5 h-2.5 rounded-full bg-bad border-2 border-panel animate-pulse" />
+                )}
+              </span>
+              <span>{t.label}</span>
             </button>
           ))}
         </div>
@@ -168,7 +190,7 @@ export function GameView({ room, me, isAdmin }: { room: RoomState; me: PlayerSta
         )}
         {tab === 'build' && (
           <div className="p-3 space-y-3">
-            <PrepPanel room={room} me={me} day={clock.day} onOpenMarket={() => setTab('market')} />
+            <PrepPanel room={room} me={me} day={clock.day} elapsedMs={elapsedMs} onOpenMarket={() => setTab('market')} />
             <div className="panel p-3 text-xs text-muted">
               Tip: announcing builds in the news lets others "inspire" themselves for +1 morale,
               earning you +2 reputation. Stay silent to hide your build-up.

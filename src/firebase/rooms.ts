@@ -55,6 +55,7 @@ export function blankPlayer(uid: string, name: string): PlayerState {
     daily: { speechUsed: false, lastResetDay: 0 },
     camps: [],
     ironDome: { activeUntilDay: 0, interceptsToday: 0 },
+    buildQueue: [],
     fatigueToday: 0,
     totals: { damageDealt: 0, damageTaken: 0, nukesLaunched: 0, spentOnBuilds: 0, intelOps: 0, speechesGiven: 0 },
   };
@@ -354,6 +355,68 @@ export async function captureTerritory(
     }
   }
   await updateDoc(ref, updates);
+}
+
+// ---- Eliminated-player merge -------------------------------------------------
+
+// When a player's capital falls, fold them into the victor's side: join the
+// victor's alliance, or — if the victor is solo — spin up a new coalition
+// containing both. The defeated player keeps playing as a junior ally and
+// their remaining population counts toward the victor's standings.
+// Returns the alliance name used, for the news post.
+export async function mergeEliminatedPlayer(
+  code: string,
+  victorUid: string,
+  victimUid: string,
+): Promise<string | null> {
+  const db = requireDb();
+  const ref = doc(db, 'rooms', code.toUpperCase());
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return null;
+  const room = snap.data() as RoomState;
+  const victor = room.players[victorUid];
+  const victim = room.players[victimUid];
+  if (!victor || !victim) return null;
+  // Already on the same side — nothing to do.
+  if (victor.allianceId && victor.allianceId === victim.allianceId) {
+    return room.alliances[victor.allianceId]?.name ?? null;
+  }
+
+  const updates: Record<string, unknown> = {};
+
+  // Pull the victim out of their old alliance, dissolving it if empty.
+  if (victim.allianceId && room.alliances[victim.allianceId]) {
+    const old = room.alliances[victim.allianceId];
+    const remaining = old.memberIds.filter((m) => m !== victimUid);
+    updates[`alliances.${old.id}`] = remaining.length === 0 ? null : { ...old, memberIds: remaining };
+  }
+
+  let allianceName: string;
+  if (victor.allianceId && room.alliances[victor.allianceId]) {
+    const a = room.alliances[victor.allianceId];
+    allianceName = a.name;
+    if (!a.memberIds.includes(victimUid)) {
+      updates[`alliances.${a.id}`] = { ...a, memberIds: [...a.memberIds, victimUid] };
+    }
+    updates[`players.${victimUid}.allianceId`] = a.id;
+  } else {
+    // Solo victor: forge a coalition holding both players.
+    const id = nanoid(6);
+    allianceName = `${victor.name}'s Coalition`;
+    const coalition: AllianceState = {
+      id,
+      name: allianceName,
+      founderId: victorUid,
+      memberIds: [victorUid, victimUid],
+    };
+    updates[`alliances.${id}`] = coalition;
+    updates[`players.${victorUid}.allianceId`] = id;
+    updates[`players.${victimUid}.allianceId`] = id;
+  }
+  updates[`players.${victimUid}.eliminated`] = true;
+
+  await updateDoc(ref, updates);
+  return allianceName;
 }
 
 // ---- Room status transition (end game) -------------------------------------
