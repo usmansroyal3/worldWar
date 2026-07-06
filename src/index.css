@@ -110,3 +110,230 @@ body {
   50%      { transform: scale(1.25); opacity: 1; }
 }
 .launch-pulse { animation: launch-pulse 0.9s ease-in-out infinite; }
+
+/* ─── Battle layer sprites ─────────────────────────────────────── */
+.battle-sprite-wrap { background: none !important; border: 0 !important; pointer-events: none; }
+.battle-sprite {
+  display: inline-block;
+  text-align: center;
+  filter: drop-shadow(0 0 4px rgba(0,0,0,0.7));
+  will-change: transform;
+}
+
+/* Planes bob slightly while flying */
+@keyframes plane-bob {
+  0%, 100% { transform: translateY(-1px) scale(1); }
+  50%      { transform: translateY(1px)  scale(1.05); }
+}
+.plane-bob { animation: plane-bob 0.7s ease-in-out infinite; font-size: 18px; line-height: 1; }
+
+/* Spinning rocket / missile */
+@keyframes rocket-spin {
+  from { transform: rotate(-8deg); }
+  to   { transform: rotate(8deg); }
+}
+.rocket-spin { animation: rocket-spin 0.25s linear infinite alternate; font-size: 18px; line-height: 1; }
+.glow-red    { filter: drop-shadow(0 0 6px #ef4444) drop-shadow(0 0 12px #ef4444); }
+.glow-amber  { filter: drop-shadow(0 0 8px #fbbf24) drop-shadow(0 0 16px #f59e0b); }
+
+/* Naval ship + sub */
+.ship-cruise { font-size: 22px; line-height: 1; }
+.sub-stealth { font-size: 22px; line-height: 1; opacity: 0.65; }
+
+/* Ground march */
+@keyframes ground-march {
+  0%, 100% { transform: translateY(0) rotate(-2deg); }
+  50%      { transform: translateY(-1px) rotate(2deg); }
+}
+.ground-march { animation: ground-march 0.45s linear infinite; font-size: 17px; line-height: 1; }
+
+/* Boom / explosion pop */
+@keyframes boom-pop {
+  0%   { transform: scale(0.3); opacity: 0; }
+  20%  { transform: scale(1.5); opacity: 1; filter: brightness(1.5); }
+  60%  { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(0.8); opacity: 0; }
+}
+.boom-pop { animation: boom-pop 1.2s ease-out forwards; font-size: 24px; line-height: 1; }
+.boom-pop.big { font-size: 36px; }
+
+/* Shield rise (interceptor) */
+@keyframes shield-rise {
+  0%   { transform: translateY(8px) scale(0.6); opacity: 0; }
+  100% { transform: translateY(-4px) scale(1.1); opacity: 1; }
+}
+.shield-rise { animation: shield-rise 0.7s ease-out forwards; font-size: 22px; line-height: 1; }
+
+/* Big damage / status badge */
+.battle-badge {
+  background: rgba(11,18,32,0.92);
+  border: 1.5px solid;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+  animation: impact-pop 3.5s ease-out forwards;
+  text-align: center;
+}
+
+/* Nuclear visuals */
+@keyframes nuke-cloud {
+  0%   { transform: scale(0.3); opacity: 0; }
+  30%  { transform: scale(2.2); opacity: 1; filter: brightness(1.4) hue-rotate(20deg); }
+  100% { transform: scale(3.5); opacity: 0; }
+}
+.nuke-cloud { animation: nuke-cloud 5s ease-out forwards; font-size: 56px; line-height: 1; }
+
+@keyframes nuke-ring {
+  0%   { transform: scale(0.3); opacity: 1; }
+  100% { transform: scale(6); opacity: 0; }
+}
+.nuke-ring   { animation: nuke-ring 3s ease-out forwards !important; }
+.nuke-ring-2 { animation: nuke-ring 3s ease-out 0.5s forwards !important; }
+
+/* ─── Battle v2: trails, shake, flash, tracers, smoke ─────────── */
+.trail-fade { animation: trail-fade 0.75s ease-out forwards; }
+@keyframes trail-fade { from { opacity: 0.85; } to { opacity: 0; } }
+
+@keyframes cam-shake {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-7px, 5px); }
+  40% { transform: translate(6px, -5px); }
+  60% { transform: translate(-5px, -4px); }
+  80% { transform: translate(5px, 4px); }
+}
+.shake     { animation: cam-shake 0.45s linear; }
+.shake-big { animation: cam-shake 0.45s linear 4; }
+
+.nuke-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1200;
+  animation: nuke-flash 1.3s ease-out forwards;
+}
+@keyframes nuke-flash {
+  0% { opacity: 0; }
+  8% { opacity: 0.95; }
+  100% { opacity: 0; }
+}
+
+.smoke-drift {
+  animation: smoke-drift 2.4s ease-out forwards;
+  font-size: 20px;
+  line-height: 1;
+}
+@keyframes smoke-drift {
+  0%   { transform: translate(0, 0) scale(0.6); opacity: 0.9; }
+  100% { transform: translate(var(--dx, 12px), -28px) scale(1.5); opacity: 0; }
+}
+
+.tracer-dot {
+  color: #fde047;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 0.6;
+  filter: drop-shadow(0 0 4px #fde047) drop-shadow(0 0 8px #f59e0b);
+}
+
+/* ─── War-room chrome ─────────────────────────────────────────── */
+/* Scanlines + vignette over the map for a command-center CRT feel */
+.map-crt { position: relative; }
+.map-crt::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 450;
+  background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,0.014) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at center, transparent 55%, rgba(2, 6, 18, 0.5) 100%);
+}
+
+/* Rotating radar sweep over the player's homeland */
+.radar-wrap { position: relative; width: 140px; height: 140px; pointer-events: none; }
+.radar-ring { position: absolute; inset: 0; border: 1px solid rgba(59,130,246,0.35); border-radius: 50%; }
+.radar-ring.r2 { inset: 23%; }
+.radar-ring.r3 { inset: 46%; }
+.radar-beam {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, rgba(59,130,246,0.45), transparent 70deg, transparent 360deg);
+  animation: radar-spin 4s linear infinite;
+}
+@keyframes radar-spin { to { transform: rotate(360deg); } }
+.radar-hero { width: 210px; height: 210px; }
+.radar-blip {
+  position: absolute;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 6px #22c55e;
+  animation: radar-blip 4s ease-out infinite;
+}
+@keyframes radar-blip { 0%, 68% { opacity: 0; } 74% { opacity: 1; } 100% { opacity: 0; } }
+
+/* Phase banner pulse */
+@keyframes banner-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+.war-banner { animation: banner-pulse 1.6s ease-in-out infinite; }
+
+/* Stat value blip on change */
+@keyframes stat-blip { 0% { transform: scale(1); } 40% { transform: scale(1.3); color: #fff; } 100% { transform: scale(1); } }
+.stat-blip { animation: stat-blip 0.5s ease-out; }
+
+/* Gradient headline for the landing hero */
+.title-grad {
+  background: linear-gradient(100deg, #60a5fa 0%, #e6ecff 45%, #93c5fd 60%, #60a5fa 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: title-shimmer 5s linear infinite;
+}
+@keyframes title-shimmer { to { background-position: 200% center; } }
+
+/* ─── Capital HP pins ─────────────────────────────────────────── */
+.capital-pin-wrap { background: none !important; border: 0 !important; }
+.capital-pin {
+  background: rgba(11, 18, 32, 0.96);
+  border: 2px solid var(--c);
+  border-radius: 8px;
+  padding: 4px 8px 5px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 13px;
+  line-height: 1.15;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.4);
+  white-space: nowrap;
+  pointer-events: auto;
+  width: 100%;
+  text-align: center;
+}
+.capital-pin.mine {
+  outline: 2px solid rgba(59,130,246,0.7);
+  outline-offset: 2px;
+}
+.capital-pin.eliminated {
+  opacity: 0.6;
+  filter: grayscale(0.6);
+}
+.capital-pin-label { color: var(--c); font-weight: 700; font-size: 13px; }
+.capital-pin-name  { color: #cbd5e1; font-size: 10px; font-weight: 600; letter-spacing: 0.3px; margin-top: 1px; }
+.capital-pin-bar {
+  width: 100%;
+  height: 4px;
+  background: rgba(255,255,255,0.15);
+  border-radius: 2px;
+  margin: 3px 0;
+  overflow: hidden;
+}
+.capital-pin-bar > div {
+  height: 100%;
+  background: var(--c);
+  transition: width 0.6s ease;
+}

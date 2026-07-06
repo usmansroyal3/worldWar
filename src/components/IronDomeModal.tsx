@@ -77,9 +77,11 @@ export function IronDomeModal({ open, onClose, room, me, day }: Props) {
         </div>
 
         <div className="text-xs text-muted mb-3">
-          The Iron Dome intercepts incoming missiles and nuclear warheads, but each interception
-          costs you the equivalent of one missile (${DAILY_UPKEEP}M). It is the costliest weapon
-          in the arsenal.
+          The Iron Dome intercepts incoming missiles, but each interception costs you one
+          missile's worth (${DAILY_UPKEEP}M). The costliest weapon in your arsenal.
+          {me.army.ironDomes > 1 && (
+            <div className="mt-1 text-good">You own {me.army.ironDomes} batteries — interception chance scales additively (capped at 95%).</div>
+          )}
         </div>
 
         {isActive ? (

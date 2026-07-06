@@ -20,19 +20,19 @@ export interface UnitDef {
 
 export const UNITS: UnitDef[] = [
   // Land
-  { key: 'infantry', label: 'Infantry Brigade',  emoji: '🪖', cost: 5,    batchSize: 1000, capitalDmg: 0.01, longRange: false, groundOnly: true,  category: 'land', unitNoun: 'soldiers' },
-  { key: 'tanks',    label: 'Tank Battalion',    emoji: '🛡️', cost: 25,   batchSize: 5,    capitalDmg: 5,    longRange: false, groundOnly: true,  category: 'land', unitNoun: 'tanks' },
+  { key: 'infantry', label: 'Infantry Brigade',  emoji: '🪖', cost: 5,    batchSize: 1000, capitalDmg: 0.001, longRange: false, groundOnly: true,  category: 'land', unitNoun: 'soldiers' },
+  { key: 'tanks',    label: 'Tank Battalion',    emoji: '🛡️', cost: 25,   batchSize: 5,    capitalDmg: 0.5,   longRange: false, groundOnly: true,  category: 'land', unitNoun: 'tanks' },
   // Air
   { key: 'fighters', label: 'Fighter Squadron',  emoji: '✈️', cost: 60,   batchSize: 1, capitalDmg: 1,    longRange: true,  groundOnly: false, category: 'air',  unitNoun: 'fighters' },
-  { key: 'rafales',  label: 'Rafale Heavy Wing', emoji: '🛫', cost: 110,  batchSize: 1, capitalDmg: 2,    longRange: true,  groundOnly: false, category: 'air',  unitNoun: 'rafales', description: 'Multirole — higher damage, harder to intercept.' },
+  { key: 'rafales',  label: 'Rafale Heavy Wing', emoji: '🛫', cost: 110,  batchSize: 1, capitalDmg: 1.5,  longRange: true,  groundOnly: false, category: 'air',  unitNoun: 'rafales', description: 'Multirole — higher damage, harder to intercept.' },
   { key: 'stealth',  label: 'Stealth Squadron',  emoji: '🦇', cost: 200,  batchSize: 1, capitalDmg: 3,    longRange: true,  groundOnly: false, category: 'air',  unitNoun: 'stealths', description: 'F-35-class. Bypasses 50% of conventional air defense.' },
-  { key: 'bombers',  label: 'Bomber Wing',       emoji: '🛩️', cost: 120,  batchSize: 1, capitalDmg: 3,    longRange: true,  groundOnly: false, category: 'air',  unitNoun: 'bombers' },
+  { key: 'bombers',  label: 'Bomber Wing',       emoji: '🛩️', cost: 120,  batchSize: 1, capitalDmg: 2,    longRange: true,  groundOnly: false, category: 'air',  unitNoun: 'bombers' },
   // Sea
   { key: 'ships',    label: 'Naval Fleet',       emoji: '🚢', cost: 90,   batchSize: 1, capitalDmg: 1,    longRange: true,  groundOnly: false, category: 'sea',  unitNoun: 'ships' },
   { key: 'subs',     label: 'Submarine',         emoji: '⚓', cost: 180,  batchSize: 1, capitalDmg: 2,    longRange: true,  groundOnly: false, category: 'sea',  unitNoun: 'subs',     description: 'Stealth sea launch — ignores most air defenses.' },
   // Tactical / Strategic
-  { key: 'missiles', label: 'Ballistic Missile', emoji: '🚀', cost: 80,   batchSize: 1, capitalDmg: 10,   longRange: true,  groundOnly: false, category: 'strategic', unitNoun: 'missiles' },
-  { key: 'nukes',    label: 'Nuclear Warhead',   emoji: '☢️', cost: 0,    batchSize: 1, capitalDmg: 2000, longRange: true,  groundOnly: false, category: 'strategic', strategic: true, unitNoun: 'nukes', description: 'Devastating — not purchasable. Limited by real-world arsenal at game start.' },
+  { key: 'missiles', label: 'Ballistic Missile', emoji: '🚀', cost: 80,   batchSize: 1, capitalDmg: 5,    longRange: true,  groundOnly: false, category: 'strategic', unitNoun: 'missiles' },
+  { key: 'nukes',    label: 'Nuclear Warhead',   emoji: '☢️', cost: 0,    batchSize: 1, capitalDmg: 60,   longRange: true,  groundOnly: false, category: 'strategic', strategic: true, unitNoun: 'nukes', description: 'Devastating — wipes out 60% of a capital in one strike. Not purchasable; seeded from real-world arsenals.' },
   // Defense
   { key: 'airDefense',    label: 'Air Defense Battery', emoji: '🛰️', cost: 90,   batchSize: 1, capitalDmg: 0, longRange: false, groundOnly: false, category: 'defense', defensive: true, unitNoun: 'batteries', description: 'Intercepts ~25% of incoming aircraft per battery.' },
   { key: 'groundDefense', label: 'Fortifications',      emoji: '🧱', cost: 40,   batchSize: 1, capitalDmg: 0, longRange: false, groundOnly: false, category: 'defense', defensive: true, unitNoun: 'forts',     description: 'Hardens borders against ground invasion.' },

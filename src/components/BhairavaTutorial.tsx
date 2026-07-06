@@ -107,6 +107,7 @@ export function BhairavaTutorial({ open, onClose, room, me }: Props) {
       lines: [
         { speaker: 'b', text: `For the next ${room.prepDays} days — that's ${room.prepDays} real-world days — we prepare.` },
         { speaker: 'b', text: `Open the BUILD tab. Spend treasury on infantry, tanks, fighters, Rafales, stealth squadrons, ships, submarines, and missiles.` },
+        { speaker: 'b', text: `Production takes TIME — and the factory floor runs on morale. Keep the people happy and a fighter rolls out in hours; let morale collapse and the same order crawls.` },
         { speaker: 'b', text: `Don't forget defenses: air defense, fortifications, and the IRON DOME. The dome is our costliest weapon, but it intercepts incoming missiles — even nuclear ones — at the cost of one missile per intercept.` },
         { speaker: 'b', text: `Visit MARKET to see what friendly nations are selling — often cheaper than building it ourselves.` },
       ],
@@ -128,7 +129,7 @@ export function BhairavaTutorial({ open, onClose, room, me }: Props) {
         { speaker: 'b', text: `On Day ${room.prepDays + 1}, the gloves come off.` },
         { speaker: 'b', text: `Ground attacks require a shared land border — yours, an owned territory, or a camp.` },
         { speaker: 'b', text: `Air, naval, and missile strikes hit anywhere on the globe.` },
-        { speaker: 'b', text: `Each enemy capital starts at 10,000 HP. Plan every strike. Every unit is consumed.` },
+        { speaker: 'b', text: `Each enemy capital starts at 100 HP. A bomber dents 2, a missile 5, a nuclear warhead 60. Plan every strike. Every unit is consumed.` },
         { speaker: 'b', text: `Nuclear weapons need morale AND reputation above 95. Solo leaders lose 45% reputation after a strike — alliance members lose 30%, but every ally must approve the launch first.` },
       ],
       next: 'And the news?',

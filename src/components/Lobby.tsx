@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Crown, Check, Copy, Globe2, Shield, Loader2, Users } from 'lucide-react';
 import { COUNTRY_BY_CODE } from '@/data/countries';
 import { PERKS } from '@/data/perks';
 import { createAlliance, joinAlliance, leaveAlliance, patchPlayer, startGame, updateRoom } from '@/firebase/rooms';
 import { initialAcceptance } from '@/game/relationships';
+import { flagEmoji } from '@/lib/flags';
 import type { PlayerState, RoomState } from '@/types';
 import { CountryPicker } from './CountryPicker';
 
@@ -18,6 +19,18 @@ export function Lobby({ room, me, isAdmin }: Props) {
   const [busy, setBusy] = useState(false);
   const [allianceName, setAllianceName] = useState('');
   const [copied, setCopied] = useState(false);
+
+  // Auto-open the country picker the first time the lobby mounts for a player
+  // who hasn't picked yet — naturally chains "rename" → "pick country" for
+  // freshly-arrived joiners. The ref makes it fire only once so the user can
+  // close the picker and use the lobby normally afterwards.
+  const autoOpened = useRef(false);
+  useEffect(() => {
+    if (!autoOpened.current && !me.countryCode) {
+      autoOpened.current = true;
+      setPicking(true);
+    }
+  }, [me.countryCode]);
 
   const everyoneReady = Object.values(room.players).every((p) => p.ready && p.countryCode);
   const playerCount = Object.keys(room.players).length;
@@ -223,7 +236,9 @@ function PlayerCard({ player, isAdmin, isYou }: { player: PlayerState; isAdmin: 
   const country = player.countryCode ? COUNTRY_BY_CODE[player.countryCode] : null;
   return (
     <li className="panel-2 p-3 flex items-center gap-3">
-      <div className={`w-2.5 h-2.5 rounded-full ${player.ready ? 'bg-good' : 'bg-muted'}`} />
+      <div className="w-9 h-9 rounded-full bg-panel border border-border flex items-center justify-center text-xl shrink-0">
+        {country ? flagEmoji(player.countryCode) : '❓'}
+      </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           {isAdmin && <Crown className="w-3.5 h-3.5 text-warn" />}
@@ -233,8 +248,9 @@ function PlayerCard({ player, isAdmin, isYou }: { player: PlayerState; isAdmin: 
           {country ? country.name : 'No country yet'}
         </div>
       </div>
-      <div className="text-right">
-        <div className="text-xs text-muted">{player.perks.length} perks</div>
+      <div className="text-right shrink-0">
+        <div className={`w-2.5 h-2.5 rounded-full ml-auto mb-1 ${player.ready ? 'bg-good' : 'bg-muted'}`} />
+        <div className="text-xs text-muted">{player.ready ? 'Ready' : 'Picking'}</div>
       </div>
     </li>
   );

@@ -46,6 +46,10 @@ export interface CapitalState {
 export interface DailyFlags {
   speechUsed: boolean;
   lastResetDay: number;   // last day a daily tick was applied to THIS player
+  // Daily-objective counters (optional for rooms created before this field).
+  buildsToday?: number;
+  advancesToday?: number;
+  missionClaimed?: boolean;
 }
 
 export interface ArmyCamp {
@@ -61,6 +65,17 @@ export interface ArmyCamp {
 export interface IronDomeState {
   activeUntilDay: number;   // 0 = inactive; otherwise day until which the dome is active
   interceptsToday: number;  // counter that resets at end of day
+}
+
+// A unit purchase in production. Times are stored as GAME-ELAPSED ms
+// (now - room.startedAt) rather than wall-clock, so the admin fast-forward
+// button also completes pending builds — exactly like the day clock.
+export interface BuildOrder {
+  id: string;
+  unitKey: keyof ArmyState;
+  qty: number;              // batch size at time of purchase
+  placedAtElapsedMs: number;
+  readyAtElapsedMs: number;
 }
 
 export interface PlayerState {
@@ -82,6 +97,20 @@ export interface PlayerState {
   // New systems
   camps: ArmyCamp[];
   ironDome: IronDomeState;
+  // Units in production — completed by useBuildQueue when their readyAt passes.
+  buildQueue: BuildOrder[];
+  // War-fatigue accumulator: damage dealt today drives morale loss at day tick.
+  fatigueToday: number;
+  // Tracks total stats for MVP awards in the end-game screen.
+  totals: {
+    damageDealt: number;
+    damageTaken: number;
+    nukesLaunched: number;
+    spentOnBuilds: number;
+    intelOps: number;
+    speechesGiven: number;
+  };
+  eliminated?: boolean;
 }
 
 export interface AllianceState {
@@ -109,7 +138,11 @@ export type NewsKind =
   | 'system'
   | 'nuke'
   | 'intercept'
-  | 'camp';
+  | 'camp'
+  | 'event'        // random world event
+  | 'capture'      // territory capture
+  | 'declaration'  // war declared / ended
+  | 'digest';      // per-day digest
 
 export interface NewsItem {
   id: string;
@@ -122,9 +155,7 @@ export interface NewsItem {
   title: string;
   body: string;
   inspiredBy?: string[];
-  // meta carries optional structured payload used by animations + UI
-  // (e.g. routeFrom/routeTo ISO codes for attack-route polyline)
-  meta?: Record<string, string | number | boolean | null>;
+  meta?: Record<string, unknown>;
 }
 
 export interface MoveItem {
@@ -136,16 +167,40 @@ export interface MoveItem {
   payload: Record<string, unknown>;
 }
 
-// Pending alliance vote on a nuclear strike. Approval-required when proposer is in an alliance.
 export interface PendingNuke {
   id: string;
   proposerId: string;
   proposerCountry: string;
-  targetCode: string;       // country code being struck
-  targetPlayerId: string | null; // if the target is player-owned
-  approvedBy: string[];     // alliance member uids who have signed off
+  targetCode: string;
+  targetPlayerId: string | null;
+  approvedBy: string[];
   createdAt: number;
   day: number;
+}
+
+// Diplomatic state tracked between two players. Key is `${a}__${b}` with
+// the two UIDs sorted alphabetically so it's deterministic regardless of
+// which side calls the API.
+export type DiplomaticStatus = 'peace' | 'war' | 'ceasefire';
+export interface DiplomaticState {
+  status: DiplomaticStatus;
+  declaredAt: number;
+  declaredBy: string;
+}
+
+// Random world event hitting an NPC country.
+export interface WorldEvent {
+  id: string;
+  day: number;
+  kind: 'pandemic' | 'recession' | 'breakthrough' | 'unrest' | 'sanctions';
+  targetCode: string;
+  createdAt: number;
+}
+
+// Snapshot of standings at the end of each day — drives the end-game graph.
+export interface DaySnapshot {
+  day: number;
+  totals: Record<string, { popScore: number; capitalHp: number; money: number }>;
 }
 
 export interface RoomState {
@@ -161,4 +216,9 @@ export interface RoomState {
   alliances: Record<string, AllianceState>;
   npc: Record<string, NpcRelation>;
   pendingNukes: Record<string, PendingNuke>;
+  // New systems
+  diplomacy: Record<string, DiplomaticState>;
+  events: WorldEvent[];
+  history: DaySnapshot[];
+  lastEventDay: number;
 }

@@ -1,10 +1,8 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
-import { Circle, CircleMarker, Polyline, Tooltip, useMap } from 'react-leaflet';
+import { useEffect, useMemo } from 'react';
+import { Circle, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { COUNTRY_BY_CODE } from '@/data/countries';
-import type { NewsItem, RoomState } from '@/types';
-
-const ATTACK_TTL_MS = 14_000;
+import type { RoomState } from '@/types';
 
 // Iron Dome shields over active defenders' centroids.
 export function IronDomeOverlay({ room }: { room: RoomState }) {
@@ -36,101 +34,6 @@ export function IronDomeOverlay({ room }: { room: RoomState }) {
   );
 }
 
-// Live attack visualisation: route polyline + launcher pulse + impact badge.
-// Drives off recent news items (kind 'attack' or 'nuke') with routeFrom/routeTo
-// in meta. Each event renders for ~14 seconds then disappears.
-export function AttackRoutes({ news }: { news: NewsItem[] }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 500);
-    return () => clearInterval(id);
-  }, []);
-
-  const recent = useMemo(() => {
-    return news.filter((n) => {
-      if (n.kind !== 'attack' && n.kind !== 'nuke' && n.kind !== 'intercept') return false;
-      const age = now - n.createdAt;
-      if (age > ATTACK_TTL_MS) return false;
-      const from = n.meta?.routeFrom as string | undefined;
-      const to = n.meta?.routeTo as string | undefined;
-      if (!from || !to) return false;
-      return COUNTRY_BY_CODE[from] && COUNTRY_BY_CODE[to];
-    });
-  }, [news, now]);
-
-  return (
-    <>
-      {recent.map((n) => {
-        const from = COUNTRY_BY_CODE[n.meta!.routeFrom as string].center;
-        const to = COUNTRY_BY_CODE[n.meta!.routeTo as string].center;
-        const isNuke = n.kind === 'nuke';
-        const isIntercept = n.kind === 'intercept';
-        const lineColor = isNuke ? '#fbbf24' : isIntercept ? '#60a5fa' : '#ef4444';
-        const dmg = (n.meta?.dmg as number | undefined) ?? 0;
-
-        return (
-          <Fragment key={n.id}>
-            {/* Route arc */}
-            <Polyline
-              positions={[from, to]}
-              pathOptions={{
-                color: lineColor,
-                weight: isNuke ? 5 : 3,
-                dashArray: '10 8',
-                opacity: 0.95,
-                className: 'attack-dash',
-              }}
-            />
-            {/* Launch glow at source */}
-            <CircleMarker
-              center={from}
-              radius={9}
-              pathOptions={{
-                color: lineColor,
-                fillColor: lineColor,
-                fillOpacity: 0.6,
-                weight: 2,
-                className: 'launch-pulse',
-              }}
-            />
-            {/* Impact rings at target */}
-            <CircleMarker
-              center={to}
-              radius={14}
-              pathOptions={{
-                color: lineColor,
-                fillColor: lineColor,
-                fillOpacity: 0.15,
-                weight: 2,
-                className: 'impact-ring',
-              }}
-            />
-            <CircleMarker
-              center={to}
-              radius={8}
-              pathOptions={{
-                color: lineColor,
-                fillColor: lineColor,
-                fillOpacity: 0.9,
-                weight: 1,
-              }}
-            >
-              {/* Damage label that pops up over the target */}
-              <Tooltip permanent direction="top" offset={[0, -8]} className="impact-pop">
-                {isIntercept
-                  ? '🛡️ Intercepted'
-                  : isNuke
-                  ? `☢️ ${dmg.toLocaleString()} dmg`
-                  : `💥 ${dmg.toLocaleString()} dmg`}
-              </Tooltip>
-            </CircleMarker>
-          </Fragment>
-        );
-      })}
-    </>
-  );
-}
-
 function useCurrentDay(room: RoomState): number {
   return useMemo(() => {
     const s = room.startedAt;
@@ -146,6 +49,27 @@ function useCurrentDay(room: RoomState): number {
     const elapsed = Math.max(0, Date.now() - ms);
     return Math.floor(elapsed / room.dayLengthMs) + 1;
   }, [room.startedAt, room.dayLengthMs]);
+}
+
+// Rotating radar sweep centred on the viewer's homeland — pure decoration,
+// but it anchors the eye to "your" spot on the map war-room style.
+export function HomeRadar({ room, viewerUid }: { room: RoomState; viewerUid: string | null }) {
+  const map = useMap();
+  useEffect(() => {
+    const p = viewerUid ? room.players[viewerUid] : null;
+    if (!p?.countryCode) return;
+    const def = COUNTRY_BY_CODE[p.countryCode];
+    if (!def) return;
+    const icon = L.divIcon({
+      html: '<div class="radar-wrap"><div class="radar-ring"></div><div class="radar-ring r2"></div><div class="radar-ring r3"></div><div class="radar-beam"></div></div>',
+      className: 'battle-sprite-wrap',
+      iconSize: [140, 140],
+      iconAnchor: [70, 70],
+    });
+    const m = L.marker(def.center, { icon, interactive: false, zIndexOffset: 100 }).addTo(map);
+    return () => { m.remove(); };
+  }, [room.players, viewerUid, map]);
+  return null;
 }
 
 // Camp pins (yellow for yours, grey for others).
@@ -175,4 +99,52 @@ export function CampPins({ room, viewerUid }: { room: RoomState; viewerUid: stri
     return () => { layer.remove(); };
   }, [room.players, map, viewerUid]);
   return null;
+}
+
+// Capital HP pins — every player-owned country gets a labeled HP badge at its
+// centroid so everyone can see at a glance how much damage each side has
+// left before elimination.
+export function CapitalPins({ room, viewerUid }: { room: RoomState; viewerUid: string | null }) {
+  const map = useMap();
+  useEffect(() => {
+    const layer = L.layerGroup().addTo(map);
+    Object.values(room.players).forEach((p) => {
+      if (!p.countryCode) return;
+      const def = COUNTRY_BY_CODE[p.countryCode];
+      if (!def) return;
+      const hp = Math.round(p.capital.hp);
+      const maxHp = Math.round(p.capital.maxHp);
+      const hpPct = Math.max(0, Math.min(100, (hp / maxHp) * 100));
+      const color = hpPct > 50 ? '#22c55e' : hpPct > 25 ? '#f59e0b' : '#ef4444';
+      const isMine = p.uid === viewerUid;
+      const eliminated = hp <= 0;
+
+      const html = `
+        <div class="capital-pin ${isMine ? 'mine' : ''} ${eliminated ? 'eliminated' : ''}" style="--c:${color}">
+          <div class="capital-pin-label">${eliminated ? '💀 DOWN' : `🏛️ ${hp} / ${maxHp}`}</div>
+          <div class="capital-pin-bar"><div style="width:${hpPct}%"></div></div>
+          <div class="capital-pin-name">${escapeHtml(p.name)}</div>
+        </div>`;
+
+      const icon = L.divIcon({
+        html,
+        className: 'capital-pin-wrap',
+        iconSize: [130, 46],
+        // anchor at top-middle so the badge hangs DOWN from the country centroid
+        iconAnchor: [65, 0],
+      });
+      const marker = L.marker(def.center, { icon, interactive: true, zIndexOffset: 500 });
+      marker.bindTooltip(
+        `<b>${escapeHtml(p.name)}</b> · ${escapeHtml(def.name)}<br>Capital HP: ${hp} / ${maxHp} (${Math.round(hpPct)}%)<br>${eliminated ? '<span style="color:#ef4444">ELIMINATED</span>' : `${(maxHp - hp)} dmg taken · ${hp} to KO`}`,
+        { sticky: true, direction: 'top' }
+      );
+      marker.addTo(layer);
+    });
+    return () => { layer.remove(); };
+  }, [room.players, map, viewerUid]);
+  return null;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] ?? c));
 }

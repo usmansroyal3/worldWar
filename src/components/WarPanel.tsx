@@ -4,9 +4,11 @@ import { UNITS, type UnitDef } from '@/game/army';
 import { COUNTRIES_BY_NAME, COUNTRY_BY_CODE } from '@/data/countries';
 import { getRelationship } from '@/game/relationships';
 import { hasGroundReachTo } from '@/game/camps';
-import { postNews } from '@/firebase/rooms';
+import { captureTerritory, mergeEliminatedPlayer, postNews } from '@/firebase/rooms';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/firebase/config';
+import { getStatus, WAR_BREAK_REP_PENALTY } from '@/game/diplomacy2';
+import { sfx } from '@/lib/sound';
 import type { ArmyState, PlayerState, RoomState } from '@/types';
 import { NukeLauncher } from './NukeLauncher';
 import { IronDomeModal } from './IronDomeModal';
@@ -88,6 +90,7 @@ export function WarPanel({ room, me, day }: Props) {
   async function launch() {
     if (!target || !me.countryCode || !preview.committedAny) return;
     setBusy(true);
+    sfx.launch();
     try {
       // Resolve per-unit-type damage with stochastic intercepts.
       const updates: Record<string, unknown> = {};
@@ -95,9 +98,12 @@ export function WarPanel({ room, me, day }: Props) {
       let totalDealt = 0;
       let totalIntercepted = 0;
       const breakdown: Record<string, number> = {};
+      // unit-key → count committed; used by the BattleLayer to spawn sprites
+      const unitsCommitted: Record<string, number> = {};
+      let primaryUnit: string = 'missiles';
+      let primaryDmg = 0;
       let domeIntercepts = 0;
       let domeCost = 0;
-      const defenderArmy = targetPlayer ? { ...targetPlayer.army } : null;
       let defenderMoney = targetPlayer?.money ?? 0;
 
       for (const k of STRIKE_KEYS) {
@@ -106,7 +112,9 @@ export function WarPanel({ room, me, day }: Props) {
         const unit = UNITS.find((u) => u.key === k)!;
         if (unit.groundOnly && !groundReach) continue;
         nextArmy[k] -= n;
+        unitsCommitted[k] = n;
         let dmg = unit.capitalDmg * n;
+        if (dmg > primaryDmg) { primaryDmg = dmg; primaryUnit = k; }
         // Air defense interception (probabilistic per round)
         if (targetPlayer && unit.category === 'air' && targetPlayer.army.airDefense > 0) {
           const interceptChance = unit.key === 'stealth' ? 0.125 : 0.25;
@@ -129,13 +137,39 @@ export function WarPanel({ room, me, day }: Props) {
         totalDealt += dmg;
       }
 
-      // Patch attacker (army down)
+      // Patch attacker (army down + totals + fatigue)
       updates[`players.${me.uid}.army`] = nextArmy;
+      updates[`players.${me.uid}.fatigueToday`] = (me.fatigueToday ?? 0) + totalDealt;
+      updates[`players.${me.uid}.totals`] = {
+        ...me.totals,
+        damageDealt: me.totals.damageDealt + totalDealt,
+      };
 
-      // Patch defender (capital HP, dome counters, money)
+      // Diplomatic surprise-attack penalty
+      if (targetPlayer) {
+        const status = getStatus(room, me.uid, targetPlayer.uid);
+        if (status === 'peace' || status === 'ceasefire') {
+          const penalty = status === 'ceasefire' ? 40 : WAR_BREAK_REP_PENALTY;
+          updates[`players.${me.uid}.reputation`] = Math.max(0, Math.round(me.reputation - penalty));
+          updates[`diplomacy.${[me.uid, targetPlayer.uid].sort().join('__')}`] = {
+            status: 'war', declaredAt: Date.now(), declaredBy: me.uid,
+          };
+        }
+      }
+
+      // Patch defender (capital HP, dome counters, money, damage-taken tally)
+      let defenderKO = false;
       if (targetPlayer) {
         const newHp = Math.max(0, targetPlayer.capital.hp - totalDealt);
+        defenderKO = newHp <= 0 && targetPlayer.capital.hp > 0;
         updates[`players.${targetPlayer.uid}.capital`] = { ...targetPlayer.capital, hp: newHp };
+        updates[`players.${targetPlayer.uid}.totals`] = {
+          ...targetPlayer.totals,
+          damageTaken: targetPlayer.totals.damageTaken + totalDealt,
+        };
+        if (newHp <= 0) {
+          updates[`players.${targetPlayer.uid}.eliminated`] = true;
+        }
         if (domeIntercepts > 0) {
           updates[`players.${targetPlayer.uid}.ironDome`] = {
             ...targetPlayer.ironDome,
@@ -147,6 +181,31 @@ export function WarPanel({ room, me, day }: Props) {
 
       // Apply all writes in one patch (single Firestore doc update)
       if (db) await updateDoc(doc(db, 'rooms', room.id), updates);
+
+      // KO handling: with a ground commit the home country is annexed; either
+      // way the defeated player is folded into the victor's side so their
+      // remaining population counts toward it.
+      if (defenderKO && targetPlayer) {
+        sfx.capture();
+        const groundCommit = !!(unitsCommitted.infantry || unitsCommitted.tanks);
+        if (groundCommit) {
+          await captureTerritory(room.id, me.uid, target, targetPlayer.uid);
+        }
+        const allianceName = await mergeEliminatedPlayer(room.id, me.uid, targetPlayer.uid);
+        await postNews(room.id, {
+          authorId: me.uid,
+          authorName: me.name,
+          authorCountry: me.countryCode,
+          day,
+          kind: 'capture',
+          title: `🏴 ${COUNTRY_BY_CODE[target]?.name} has fallen to ${COUNTRY_BY_CODE[me.countryCode!]?.name}`,
+          body: `${targetPlayer.name}'s capital is destroyed.${groundCommit ? ` Their homeland is annexed by ${me.name}.` : ''}${allianceName ? ` ${targetPlayer.name} is absorbed into ${allianceName}.` : ''}`,
+          meta: { capturedCode: target, formerOwnerUid: targetPlayer.uid },
+        });
+      } else if (totalDealt > 0) {
+        sfx.impact();
+      }
+      if (domeIntercepts > 0) sfx.intercept();
 
       // News + animation event
       await postNews(room.id, {
@@ -165,6 +224,9 @@ export function WarPanel({ room, me, day }: Props) {
           routeTo: target!,
           dmg: Math.round(totalDealt),
           intercepted: domeIntercepts > 0,
+          defended: !!(targetPlayer && targetPlayer.army.airDefense > 0),
+          units: unitsCommitted,
+          primaryUnit,
         },
       });
 
@@ -275,6 +337,7 @@ export function WarPanel({ room, me, day }: Props) {
         <div className="text-xs text-muted mt-3 space-y-1">
           <div>One buy = {UNITS.find((u) => u.key === 'infantry')!.batchSize.toLocaleString()} infantry / {UNITS.find((u) => u.key === 'tanks')!.batchSize} tanks. Other units come 1 per buy.</div>
           <div>Stealth bypasses 50% of air defense. Iron Dome intercepts missiles at ${MISSILE_INTERCEPT_COST}M per attempt (defender pays).</div>
+          <div>Capital HP starts at 100. Reduce to 0 to eliminate the enemy.</div>
         </div>
       </div>
 

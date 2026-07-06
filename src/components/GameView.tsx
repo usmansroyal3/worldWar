@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Megaphone, Map as MapIcon, Newspaper, Swords, Hammer, Trophy, HelpCircle, ShoppingCart, Shield, FastForward, Loader2 } from 'lucide-react';
+import { Megaphone, Map as MapIcon, Newspaper, Swords, Hammer, Trophy, HelpCircle, ShoppingCart, Shield, FastForward, Loader2, MessageSquare, Clock } from 'lucide-react';
 import { useGameClock } from '@/hooks/useGameClock';
 import { useNews } from '@/hooks/useRoom';
 import { useDailyTick } from '@/hooks/useDailyTick';
+import { useBuildQueue } from '@/hooks/useBuildQueue';
 import { formatCountdown } from '@/game/timer';
 import { COUNTRY_BY_CODE } from '@/data/countries';
-import { fastForwardOneDay } from '@/firebase/rooms';
+import { fastForwardOneDay, endRoom } from '@/firebase/rooms';
 import { WorldMap } from './WorldMap';
 import { StatBar } from './StatBar';
 import { SpeechModal } from './SpeechModal';
@@ -17,10 +18,17 @@ import { BhairavaTutorial, shouldShowTutorial } from './BhairavaTutorial';
 import { CountryDetail } from './CountryDetail';
 import { MarketView } from './MarketView';
 import { CampsTab } from './CampsTab';
-import { AttackRoutes, CampPins, IronDomeOverlay } from './MapOverlays';
+import { CampPins, CapitalPins, HomeRadar, IronDomeOverlay } from './MapOverlays';
+import { BattleLayer } from './BattleLayer';
+import { BattleToasts } from './BattleToasts';
+import { MissionsCard } from './MissionsCard';
+import { AllianceChat } from './AllianceChat';
+import { Timeline } from './Timeline';
+import { EndGameScreen } from './EndGameScreen';
+import { SoundToggle } from './SoundToggle';
 import type { PlayerState, RoomState } from '@/types';
 
-type Tab = 'map' | 'build' | 'camps' | 'market' | 'strike' | 'news' | 'standings';
+type Tab = 'map' | 'build' | 'camps' | 'market' | 'strike' | 'news' | 'chat' | 'timeline' | 'standings';
 
 export function GameView({ room, me, isAdmin }: { room: RoomState; me: PlayerState; isAdmin: boolean }) {
   const clock = useGameClock(room);
@@ -31,12 +39,42 @@ export function GameView({ room, me, isAdmin }: { room: RoomState; me: PlayerSta
   const [detailCode, setDetailCode] = useState<string | null>(null);
   const [ffBusy, setFfBusy] = useState(false);
 
-  useDailyTick(room.id, me, clock?.day ?? null);
+  useDailyTick(room.id, me, room, clock?.day ?? null, isAdmin);
+  const elapsedMs = useBuildQueue(room, me);
+
+  // Unseen-news red dot: compare newest item timestamp against the last time
+  // this device viewed the News tab. Cleared when the tab is opened.
+  const newsSeenKey = `ww:newsSeen:${room.id}`;
+  const [newsSeenAt, setNewsSeenAt] = useState<number>(() => {
+    try { return Number(localStorage.getItem(newsSeenKey) ?? 0); } catch { return 0; }
+  });
+  const hasUnseenNews = news.some((n) => n.createdAt > newsSeenAt);
+  useEffect(() => {
+    if (tab !== 'news' || news.length === 0) return;
+    const t = Date.now();
+    try { localStorage.setItem(newsSeenKey, String(t)); } catch { /* ignore */ }
+    setNewsSeenAt(t);
+  }, [tab, news.length, newsSeenKey]);
 
   useEffect(() => {
     if (shouldShowTutorial()) setTutorial(true);
   }, []);
 
+  // Admin auto-transitions room to 'ended' once the game clock has rolled past
+  // the final day. Single client owns the write to avoid stampedes.
+  useEffect(() => {
+    if (!isAdmin || !clock) return;
+    if (room.status === 'ended') return;
+    if (clock.phase === 'ended') {
+      endRoom(room.id).catch(() => {});
+    }
+  }, [isAdmin, clock?.phase, room.status, room.id]);
+
+  // End-game screen takes precedence over everything else
+  if (room.status === 'ended') {
+    return <EndGameScreen room={room} me={me} />;
+  }
+  // Auto-flip to ended when clock has fully expired (admin will write status)
   if (!clock) {
     return <div className="p-6 text-muted">Loading game clock...</div>;
   }
@@ -49,13 +87,15 @@ export function GameView({ room, me, isAdmin }: { room: RoomState; me: PlayerSta
       ? `${clock.day - clock.prepDays} / ${clock.warDays}`
       : 'Final';
 
-  const tabs: { id: Tab; icon: React.ReactNode; label: string; disabled?: boolean }[] = [
+  const tabs: { id: Tab; icon: React.ReactNode; label: string; disabled?: boolean; badge?: boolean }[] = [
     { id: 'map', icon: <MapIcon className="w-4 h-4" />, label: 'World' },
     { id: 'build', icon: <Hammer className="w-4 h-4" />, label: 'Build' },
     { id: 'camps', icon: <Shield className="w-4 h-4" />, label: 'Camps' },
     { id: 'market', icon: <ShoppingCart className="w-4 h-4" />, label: 'Market' },
     { id: 'strike', icon: <Swords className="w-4 h-4" />, label: 'War', disabled: clock.phase !== 'war' },
-    { id: 'news', icon: <Newspaper className="w-4 h-4" />, label: 'News' },
+    { id: 'news', icon: <Newspaper className="w-4 h-4" />, label: 'News', badge: hasUnseenNews },
+    { id: 'chat', icon: <MessageSquare className="w-4 h-4" />, label: 'Chat', disabled: !me.allianceId },
+    { id: 'timeline', icon: <Clock className="w-4 h-4" />, label: 'Timeline' },
     { id: 'standings', icon: <Trophy className="w-4 h-4" />, label: 'Standings' },
   ];
 
@@ -66,9 +106,11 @@ export function GameView({ room, me, isAdmin }: { room: RoomState; me: PlayerSta
 
   const overlays = (
     <>
+      <HomeRadar room={room} viewerUid={me.uid} />
       <IronDomeOverlay room={room} />
-      <AttackRoutes news={news} />
+      <BattleLayer news={news} />
       <CampPins room={room} viewerUid={me.uid} />
+      <CapitalPins room={room} viewerUid={me.uid} />
     </>
   );
 
@@ -100,6 +142,7 @@ export function GameView({ room, me, isAdmin }: { room: RoomState; me: PlayerSta
               {ffBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <FastForward className="w-4 h-4" />}
             </button>
           )}
+          <SoundToggle />
           <button
             className="p-2 rounded-lg text-muted hover:bg-panel2 hover:text-ink"
             onClick={() => setTutorial(true)}
@@ -112,6 +155,16 @@ export function GameView({ room, me, isAdmin }: { room: RoomState; me: PlayerSta
         <div className="mt-2"><StatBar me={me} /></div>
       </header>
 
+      {clock.phase === 'war' ? (
+        <div className="war-banner bg-bad/20 border-b border-bad/60 text-bad text-center text-xs font-bold py-1 uppercase tracking-[0.25em]">
+          ⚔️ War Phase — Day {clock.day - clock.prepDays}/{clock.warDays} · Weapons Free
+        </div>
+      ) : (
+        <div className="bg-accent/10 border-b border-border text-accent/90 text-center text-[11px] py-1 uppercase tracking-[0.25em]">
+          🛠 Preparation — Day {clock.day}/{clock.prepDays} · War in {Math.max(0, clock.prepDays - clock.day + 1)} day{clock.prepDays - clock.day === 0 ? '' : 's'}
+        </div>
+      )}
+
       <nav className="border-b border-border bg-panel">
         <div className="flex overflow-x-auto scrollbar-thin">
           {tabs.map((t) => (
@@ -123,7 +176,13 @@ export function GameView({ room, me, isAdmin }: { room: RoomState; me: PlayerSta
                 tab === t.id ? 'text-accent border-b-2 border-accent' : 'text-muted border-b-2 border-transparent'
               }`}
             >
-              {t.icon}<span>{t.label}</span>
+              <span className="relative">
+                {t.icon}
+                {t.badge && (
+                  <span className="absolute -top-1 -right-1.5 w-2.5 h-2.5 rounded-full bg-bad border-2 border-panel animate-pulse" />
+                )}
+              </span>
+              <span>{t.label}</span>
             </button>
           ))}
         </div>
@@ -131,7 +190,7 @@ export function GameView({ room, me, isAdmin }: { room: RoomState; me: PlayerSta
 
       <main className="flex-1 overflow-y-auto scrollbar-thin">
         {tab === 'map' && (
-          <div className="h-full min-h-[400px]">
+          <div className="h-full min-h-[400px] map-crt relative">
             <WorldMap
               room={room}
               viewerCountryCode={me.countryCode}
@@ -139,11 +198,12 @@ export function GameView({ room, me, isAdmin }: { room: RoomState; me: PlayerSta
               overlays={overlays}
               onCountryClick={(code) => setDetailCode(code)}
             />
+            <MissionsCard room={room} me={me} />
           </div>
         )}
         {tab === 'build' && (
           <div className="p-3 space-y-3">
-            <PrepPanel room={room} me={me} day={clock.day} onOpenMarket={() => setTab('market')} />
+            <PrepPanel room={room} me={me} day={clock.day} elapsedMs={elapsedMs} onOpenMarket={() => setTab('market')} />
             <div className="panel p-3 text-xs text-muted">
               Tip: announcing builds in the news lets others "inspire" themselves for +1 morale,
               earning you +2 reputation. Stay silent to hide your build-up.
@@ -180,12 +240,24 @@ export function GameView({ room, me, isAdmin }: { room: RoomState; me: PlayerSta
             <NewsFeed room={room} me={me} news={news} />
           </div>
         )}
+        {tab === 'chat' && (
+          <div className="p-3">
+            <AllianceChat room={room} me={me} />
+          </div>
+        )}
+        {tab === 'timeline' && (
+          <div className="p-3">
+            <Timeline room={room} news={news} currentDay={clock.day} />
+          </div>
+        )}
         {tab === 'standings' && (
           <div className="p-3">
             <Standings room={room} />
           </div>
         )}
       </main>
+
+      <BattleToasts news={news} myUid={me.uid} />
 
       <SpeechModal open={speech} onClose={() => setSpeech(false)} room={room} me={me} day={clock.day} />
       <BhairavaTutorial open={tutorial} onClose={() => setTutorial(false)} room={room} me={me} />

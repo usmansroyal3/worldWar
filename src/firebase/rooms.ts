@@ -50,11 +50,14 @@ export function blankPlayer(uid: string, name: string): PlayerState {
     money: 1000,
     innovation: startingInnovation(perks),
     army: { ...emptyArmy(), ...startingArmy(perks) },
-    capital: { hp: 10000, maxHp: 10000 },
+    capital: { hp: 100, maxHp: 100 },
     territories: [],
     daily: { speechUsed: false, lastResetDay: 0 },
     camps: [],
     ironDome: { activeUntilDay: 0, interceptsToday: 0 },
+    buildQueue: [],
+    fatigueToday: 0,
+    totals: { damageDealt: 0, damageTaken: 0, nukesLaunched: 0, spentOnBuilds: 0, intelOps: 0, speechesGiven: 0 },
   };
 }
 
@@ -84,6 +87,10 @@ export async function createRoom(uid: string, displayName: string, prepDays = 7)
     alliances: {},
     npc: {},
     pendingNukes: {},
+    diplomacy: {},
+    events: [],
+    history: [],
+    lastEventDay: 0,
   };
   await setDoc(ref, { ...room, createdAt: serverTimestamp() });
   return code;
@@ -274,5 +281,149 @@ export async function cancelNuke(code: string, proposalId: string): Promise<void
   const db = requireDb();
   const ref = doc(db, 'rooms', code.toUpperCase());
   await updateDoc(ref, { [`pendingNukes.${proposalId}`]: null });
+}
+
+// ---- Diplomacy (war / ceasefire declarations) ------------------------------
+
+import type { DiplomaticState, DiplomaticStatus, WorldEvent, DaySnapshot } from '@/types';
+import { pairKey } from '@/game/diplomacy2';
+
+export async function declareDiplomacy(
+  code: string,
+  by: string,
+  other: string,
+  status: DiplomaticStatus
+): Promise<void> {
+  const db = requireDb();
+  const ref = doc(db, 'rooms', code.toUpperCase());
+  const state: DiplomaticState = { status, declaredAt: Date.now(), declaredBy: by };
+  await updateDoc(ref, { [`diplomacy.${pairKey(by, other)}`]: state });
+}
+
+// ---- World events + history snapshot ---------------------------------------
+
+export async function appendEvent(code: string, event: WorldEvent): Promise<void> {
+  const db = requireDb();
+  const ref = doc(db, 'rooms', code.toUpperCase());
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+  const room = snap.data() as RoomState;
+  // Don't let the event log grow unbounded — cap to last 60.
+  const next = [...(room.events ?? []), event].slice(-60);
+  await updateDoc(ref, { events: next, lastEventDay: event.day });
+}
+
+export async function appendHistory(code: string, snapshot: DaySnapshot): Promise<void> {
+  const db = requireDb();
+  const ref = doc(db, 'rooms', code.toUpperCase());
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+  const room = snap.data() as RoomState;
+  const existing = room.history ?? [];
+  if (existing.some((h) => h.day === snapshot.day)) return; // idempotent
+  const next = [...existing, snapshot].sort((a, b) => a.day - b.day);
+  await updateDoc(ref, { history: next });
+}
+
+// ---- Territory capture ------------------------------------------------------
+
+// Move a country from the source player's `territories` (or `countryCode`)
+// to the attacker's `territories`. NPC capture: just adds to attacker.
+export async function captureTerritory(
+  code: string,
+  attackerUid: string,
+  targetCode: string,
+  formerOwnerUid: string | null,
+): Promise<void> {
+  const db = requireDb();
+  const ref = doc(db, 'rooms', code.toUpperCase());
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+  const room = snap.data() as RoomState;
+  const attacker = room.players[attackerUid];
+  if (!attacker || attacker.countryCode === targetCode) return;
+  if (attacker.territories.includes(targetCode)) return;
+  const updates: Record<string, unknown> = {
+    [`players.${attackerUid}.territories`]: [...attacker.territories, targetCode],
+  };
+  if (formerOwnerUid && room.players[formerOwnerUid]) {
+    const former = room.players[formerOwnerUid];
+    if (former.countryCode === targetCode) {
+      updates[`players.${formerOwnerUid}.countryCode`] = null;
+    } else {
+      updates[`players.${formerOwnerUid}.territories`] = former.territories.filter((t) => t !== targetCode);
+    }
+  }
+  await updateDoc(ref, updates);
+}
+
+// ---- Eliminated-player merge -------------------------------------------------
+
+// When a player's capital falls, fold them into the victor's side: join the
+// victor's alliance, or — if the victor is solo — spin up a new coalition
+// containing both. The defeated player keeps playing as a junior ally and
+// their remaining population counts toward the victor's standings.
+// Returns the alliance name used, for the news post.
+export async function mergeEliminatedPlayer(
+  code: string,
+  victorUid: string,
+  victimUid: string,
+): Promise<string | null> {
+  const db = requireDb();
+  const ref = doc(db, 'rooms', code.toUpperCase());
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return null;
+  const room = snap.data() as RoomState;
+  const victor = room.players[victorUid];
+  const victim = room.players[victimUid];
+  if (!victor || !victim) return null;
+  // Already on the same side — nothing to do.
+  if (victor.allianceId && victor.allianceId === victim.allianceId) {
+    return room.alliances[victor.allianceId]?.name ?? null;
+  }
+
+  const updates: Record<string, unknown> = {};
+
+  // Pull the victim out of their old alliance, dissolving it if empty.
+  if (victim.allianceId && room.alliances[victim.allianceId]) {
+    const old = room.alliances[victim.allianceId];
+    const remaining = old.memberIds.filter((m) => m !== victimUid);
+    updates[`alliances.${old.id}`] = remaining.length === 0 ? null : { ...old, memberIds: remaining };
+  }
+
+  let allianceName: string;
+  if (victor.allianceId && room.alliances[victor.allianceId]) {
+    const a = room.alliances[victor.allianceId];
+    allianceName = a.name;
+    if (!a.memberIds.includes(victimUid)) {
+      updates[`alliances.${a.id}`] = { ...a, memberIds: [...a.memberIds, victimUid] };
+    }
+    updates[`players.${victimUid}.allianceId`] = a.id;
+  } else {
+    // Solo victor: forge a coalition holding both players.
+    const id = nanoid(6);
+    allianceName = `${victor.name}'s Coalition`;
+    const coalition: AllianceState = {
+      id,
+      name: allianceName,
+      founderId: victorUid,
+      memberIds: [victorUid, victimUid],
+    };
+    updates[`alliances.${id}`] = coalition;
+    updates[`players.${victorUid}.allianceId`] = id;
+    updates[`players.${victimUid}.allianceId`] = id;
+  }
+  updates[`players.${victimUid}.eliminated`] = true;
+
+  await updateDoc(ref, updates);
+  return allianceName;
+}
+
+// ---- Room status transition (end game) -------------------------------------
+
+export async function endRoom(code: string): Promise<void> {
+  const db = requireDb();
+  const ref = doc(db, 'rooms', code.toUpperCase());
+  await updateDoc(ref, { status: 'ended' });
 }
 
