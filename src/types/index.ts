@@ -46,6 +46,10 @@ export interface CapitalState {
 export interface DailyFlags {
   speechUsed: boolean;
   lastResetDay: number;   // last day a daily tick was applied to THIS player
+  // Daily-objective counters (optional for rooms created before this field).
+  buildsToday?: number;
+  advancesToday?: number;
+  missionClaimed?: boolean;
 }
 
 export interface ArmyCamp {

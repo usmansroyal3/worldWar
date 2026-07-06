@@ -1,14 +1,17 @@
 import { useMemo, useState } from 'react';
-import { X, Globe2, Shield, ShoppingCart, Crosshair, MapPin, Loader2, Eye } from 'lucide-react';
+import { X, Globe2, Shield, ShoppingCart, Crosshair, MapPin, Loader2, Eye, Handshake } from 'lucide-react';
 import { COUNTRY_BY_CODE, type CountryDef } from '@/data/countries';
-import { relationshipRating, relationshipLabel } from '@/game/relationships';
+import { relationshipRating, relationshipLabel, initialAcceptance } from '@/game/relationships';
 import { CAMP_COST, MAX_CAMPS_PER_COUNTRY, canDeployCampIn, campsInCountry, makeCamp } from '@/game/camps';
 import { listOffers, isMarketAccessible } from '@/game/market';
+import { ADVANCES, resolveAdvance } from '@/game/diplomacy';
 import { UNIT_BY_KEY } from '@/game/army';
-import { patchPlayer, postNews } from '@/firebase/rooms';
+import { patchPlayer, postNews, updateRoom } from '@/firebase/rooms';
+import { flagEmoji } from '@/lib/flags';
+import { sfx } from '@/lib/sound';
 import { DiplomacyPanel } from './DiplomacyPanel';
 import { SpyModal } from './SpyModal';
-import type { PlayerState, RoomState } from '@/types';
+import type { AdvanceKind, PlayerState, RoomState } from '@/types';
 
 interface Props {
   open: boolean;
@@ -21,9 +24,10 @@ interface Props {
 }
 
 export function CountryDetail({ open, onClose, countryCode, room, me, day, onAttack }: Props) {
-  const [tab, setTab] = useState<'info' | 'camps' | 'market'>('info');
+  const [tab, setTab] = useState<'info' | 'camps' | 'market' | 'diplomacy'>('info');
   const [busy, setBusy] = useState(false);
   const [spying, setSpying] = useState(false);
+  const [lastAdvanceResult, setLastAdvanceResult] = useState<string | null>(null);
 
   if (!open || !countryCode) return null;
 
@@ -40,6 +44,51 @@ export function CountryDetail({ open, onClose, countryCode, room, me, day, onAtt
   const owner = Object.values(room.players).find(
     (p) => p.countryCode === countryCode || p.territories.includes(countryCode)
   );
+  const isNpc = !owner && !isHome;
+  const npcAcceptance = room.npc[countryCode]?.acceptance
+    ?? (me.countryCode ? initialAcceptance(me.countryCode, countryCode) : 50);
+  const advanceOnCooldown = room.npc[countryCode]?.lastAdvanceDay === day;
+
+  // Send a diplomatic advance (military support / peace talks / tourism) to an
+  // NPC nation — the original acceptance system: success raises acceptance
+  // toward friendly (>=90), rejection dents your morale and reputation.
+  async function sendAdvance(kind: AdvanceKind) {
+    const def = ADVANCES[kind];
+    if (me.money < def.cost || advanceOnCooldown || busy) return;
+    setBusy(true);
+    try {
+      const res = resolveAdvance(me, npcAcceptance, kind);
+      await updateRoom(room.id, {
+        [`npc.${countryCode}`]: { acceptance: res.newAcceptance, lastAdvanceDay: day },
+      } as unknown as Partial<RoomState>);
+      await patchPlayer(room.id, me.uid, {
+        money: me.money - def.cost,
+        morale: Math.max(0, Math.min(100, me.morale + res.moraleDelta)),
+        reputation: Math.max(0, Math.min(100, me.reputation + res.reputationDelta)),
+        daily: { ...me.daily, advancesToday: (me.daily.advancesToday ?? 0) + 1 },
+      });
+      await postNews(room.id, {
+        authorId: me.uid,
+        authorName: me.name,
+        authorCountry: me.countryCode,
+        day,
+        kind: 'advance',
+        title: res.accepted
+          ? `${country!.name} welcomes ${me.name}'s ${def.label.toLowerCase()}`
+          : `${country!.name} rejects ${me.name}'s ${def.label.toLowerCase()}`,
+        body: res.accepted
+          ? `${def.emoji} Ties warm between ${COUNTRY_BY_CODE[me.countryCode ?? '']?.name ?? me.name} and ${country!.name}. Acceptance now ${res.newAcceptance}.`
+          : `${country!.name} turns the offer down publicly — a small embarrassment at home.`,
+        meta: { targetCode: countryCode, accepted: res.accepted, advance: kind },
+      });
+      if (res.accepted) sfx.capture(); else sfx.defeat();
+      setLastAdvanceResult(res.accepted
+        ? `✅ Accepted! Acceptance ${Math.round(npcAcceptance)} → ${res.newAcceptance}. ${res.newAcceptance >= 90 ? `${country!.name} is now FRIENDLY.` : ''}`
+        : `❌ Rejected. Acceptance slips to ${res.newAcceptance}. Morale ${res.moraleDelta}, reputation ${res.reputationDelta}.`);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function deployCamp() {
     const gate = canDeployCampIn(room, me, countryCode!);
@@ -88,8 +137,8 @@ export function CountryDetail({ open, onClose, countryCode, room, me, day, onAtt
       <div className="panel w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
         <header className="flex items-center justify-between p-3 border-b border-border bg-panel2">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-lg bg-panel border border-border flex items-center justify-center shrink-0">
-              <Globe2 className="w-5 h-5 text-accent" />
+            <div className="w-10 h-10 rounded-lg bg-panel border border-border flex items-center justify-center shrink-0 text-2xl">
+              {flagEmoji(countryCode)}
             </div>
             <div className="min-w-0">
               <div className="font-semibold truncate">{country.name}{isHome && <span className="text-muted text-xs ml-1">(home)</span>}</div>
@@ -152,6 +201,9 @@ export function CountryDetail({ open, onClose, countryCode, room, me, day, onAtt
         {!isHome && (
           <nav className="flex border-b border-border bg-panel">
             <TabBtn label="Info" active={tab === 'info'} onClick={() => setTab('info')} icon={<MapPin className="w-3.5 h-3.5" />} />
+            {isNpc && (
+              <TabBtn label="Diplomacy" active={tab === 'diplomacy'} onClick={() => setTab('diplomacy')} icon={<Handshake className="w-3.5 h-3.5" />} />
+            )}
             <TabBtn label={`Camps · ${myCamps.length}`} active={tab === 'camps'} onClick={() => setTab('camps')} icon={<Shield className="w-3.5 h-3.5" />} disabled={label !== 'friendly'} />
             <TabBtn label="Market" active={tab === 'market'} onClick={() => setTab('market')} icon={<ShoppingCart className="w-3.5 h-3.5" />} disabled={market.length === 0} />
           </nav>
@@ -160,6 +212,56 @@ export function CountryDetail({ open, onClose, countryCode, room, me, day, onAtt
         <div className="flex-1 overflow-y-auto scrollbar-thin p-3">
           {tab === 'info' && (
             <InfoPanel country={country} room={room} me={me} onAttack={onAttack} />
+          )}
+          {tab === 'diplomacy' && isNpc && (
+            <div className="space-y-3">
+              <div className="panel-2 p-3">
+                <div className="flex items-baseline justify-between mb-1">
+                  <span className="text-xs uppercase tracking-wider text-muted">Acceptance toward you</span>
+                  <span className="font-mono text-sm" style={{ color: ratingColor }}>{Math.round(npcAcceptance)} / 100</span>
+                </div>
+                <div className="stat-bar relative">
+                  <div className="h-full" style={{ width: `${npcAcceptance}%`, background: ratingColor }} />
+                </div>
+                <div className="flex justify-between text-[10px] text-muted mt-1">
+                  <span>≤10 enemy</span><span>50 neutral</span><span>≥90 friendly</span>
+                </div>
+                <div className="text-xs text-muted mt-2">
+                  Win {country.name} over with advances. Reach 90+ and they turn green — unlocking camps and their market. Rejection dents your morale and reputation.
+                </div>
+              </div>
+
+              {lastAdvanceResult && (
+                <div className="panel-2 p-2.5 text-xs border border-border">{lastAdvanceResult}</div>
+              )}
+
+              <div className="space-y-2">
+                {(Object.keys(ADVANCES) as AdvanceKind[]).map((kind) => {
+                  const def = ADVANCES[kind];
+                  const afford = me.money >= def.cost;
+                  return (
+                    <button
+                      key={kind}
+                      className="w-full panel-2 p-3 text-left border border-border hover:border-accent disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={!afford || advanceOnCooldown || busy}
+                      onClick={() => sendAdvance(kind)}
+                    >
+                      <div className="flex items-baseline justify-between">
+                        <span className="font-semibold">{def.emoji} {def.label}</span>
+                        <span className="font-mono text-xs text-warn">${def.cost}M</span>
+                      </div>
+                      <div className="text-xs text-muted mt-1">
+                        +{def.acceptanceDelta} acceptance on success · rejection: −{def.rejectMoralePenalty} morale, −{def.rejectReputationPenalty} reputation
+                      </div>
+                      {busy && <Loader2 className="w-3.5 h-3.5 animate-spin mt-1" />}
+                    </button>
+                  );
+                })}
+              </div>
+              {advanceOnCooldown && (
+                <div className="text-xs text-warn">Envoys already sent to {country.name} today — try again tomorrow.</div>
+              )}
+            </div>
           )}
           {tab === 'camps' && (
             <CampsPanel country={country} room={room} me={me} camps={myCamps} onDeploy={deployCamp} busy={busy} />

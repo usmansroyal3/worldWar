@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import type { PlayerState } from '@/types';
 import { Heart, Smile, Coins, Lightbulb, Megaphone, ShieldAlert } from 'lucide-react';
 import { armyTotal } from '@/game/army';
@@ -19,14 +20,28 @@ function Stat({ icon, label, value, max, unit, color, rawValue }: {
   icon: React.ReactNode; label: string; value: number; max?: number; unit?: string; color: string; rawValue?: boolean;
 }) {
   const pct = max ? Math.max(0, Math.min(100, (value / max) * 100)) : null;
+
+  // Pulse the number whenever its value changes so live updates catch the eye.
+  const [blip, setBlip] = useState(false);
+  const prev = useRef(value);
+  useEffect(() => {
+    if (prev.current === value) return;
+    prev.current = value;
+    setBlip(true);
+    const t = setTimeout(() => setBlip(false), 520);
+    return () => clearTimeout(t);
+  }, [value]);
+
   return (
     <div className="panel-2 p-2">
       <div className="flex items-center justify-between mb-1 text-muted">
         <span className="flex items-center gap-1">{icon}{label}</span>
-        <span className="font-mono text-ink">{rawValue ? value.toLocaleString() : `${Math.round(value)}${max ? `/${max}` : ''}`}{unit ?? ''}</span>
+        <span className={`font-mono text-ink ${blip ? 'stat-blip inline-block' : ''}`}>
+          {rawValue ? value.toLocaleString() : `${Math.round(value)}${max ? `/${max}` : ''}`}{unit ?? ''}
+        </span>
       </div>
       {pct !== null && (
-        <div className="stat-bar"><div className={`h-full ${color}`} style={{ width: `${pct}%` }} /></div>
+        <div className="stat-bar"><div className={`h-full ${color} transition-all duration-700`} style={{ width: `${pct}%` }} /></div>
       )}
     </div>
   );

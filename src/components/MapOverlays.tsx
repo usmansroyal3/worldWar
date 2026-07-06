@@ -51,6 +51,27 @@ function useCurrentDay(room: RoomState): number {
   }, [room.startedAt, room.dayLengthMs]);
 }
 
+// Rotating radar sweep centred on the viewer's homeland — pure decoration,
+// but it anchors the eye to "your" spot on the map war-room style.
+export function HomeRadar({ room, viewerUid }: { room: RoomState; viewerUid: string | null }) {
+  const map = useMap();
+  useEffect(() => {
+    const p = viewerUid ? room.players[viewerUid] : null;
+    if (!p?.countryCode) return;
+    const def = COUNTRY_BY_CODE[p.countryCode];
+    if (!def) return;
+    const icon = L.divIcon({
+      html: '<div class="radar-wrap"><div class="radar-ring"></div><div class="radar-ring r2"></div><div class="radar-ring r3"></div><div class="radar-beam"></div></div>',
+      className: 'battle-sprite-wrap',
+      iconSize: [140, 140],
+      iconAnchor: [70, 70],
+    });
+    const m = L.marker(def.center, { icon, interactive: false, zIndexOffset: 100 }).addTo(map);
+    return () => { m.remove(); };
+  }, [room.players, viewerUid, map]);
+  return null;
+}
+
 // Camp pins (yellow for yours, grey for others).
 export function CampPins({ room, viewerUid }: { room: RoomState; viewerUid: string | null }) {
   const map = useMap();

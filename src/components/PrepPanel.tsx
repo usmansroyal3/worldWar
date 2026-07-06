@@ -51,6 +51,7 @@ export function PrepPanel({ room, me, day, elapsedMs, onOpenMarket }: Props) {
         buildQueue: [...queue, order],
         money: me.money - cost,
         totals: { ...me.totals, spentOnBuilds: me.totals.spentOnBuilds + cost },
+        daily: { ...me.daily, buildsToday: (me.daily.buildsToday ?? 0) + 1 },
       });
       if (publish) {
         await postNews(room.id, {

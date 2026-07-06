@@ -224,6 +224,7 @@ export function WarPanel({ room, me, day }: Props) {
           routeTo: target!,
           dmg: Math.round(totalDealt),
           intercepted: domeIntercepts > 0,
+          defended: !!(targetPlayer && targetPlayer.army.airDefense > 0),
           units: unitsCommitted,
           primaryUnit,
         },

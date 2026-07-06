@@ -46,11 +46,21 @@ export function Landing() {
     <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-bg">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-accent/20 border border-accent/40 mb-3">
-            <Globe2 className="w-8 h-8 text-accent" />
+          <div className="relative mx-auto mb-4 radar-wrap radar-hero">
+            <div className="radar-ring" />
+            <div className="radar-ring r2" />
+            <div className="radar-ring r3" />
+            <div className="radar-beam" />
+            <div className="radar-blip" style={{ top: '26%', left: '62%' }} />
+            <div className="radar-blip" style={{ top: '58%', left: '30%', animationDelay: '1.3s' }} />
+            <div className="radar-blip" style={{ top: '42%', left: '48%', animationDelay: '2.6s' }} />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <Globe2 className="w-10 h-10 text-accent/80" />
+            </div>
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">World War</h1>
-          <p className="text-muted text-sm mt-1">Real-time multiplayer geopolitical strategy</p>
+          <h1 className="text-4xl font-bold tracking-[0.15em] uppercase title-grad">World War</h1>
+          <p className="text-muted text-sm mt-2 tracking-wide">Command a nation. Forge alliances. Take the world.</p>
+          <p className="text-muted/70 text-xs mt-1">Real-time strategy for 2–6 friends · 195 real countries</p>
         </div>
 
         {!firebaseConfigured && (

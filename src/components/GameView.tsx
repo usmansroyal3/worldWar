@@ -18,9 +18,10 @@ import { BhairavaTutorial, shouldShowTutorial } from './BhairavaTutorial';
 import { CountryDetail } from './CountryDetail';
 import { MarketView } from './MarketView';
 import { CampsTab } from './CampsTab';
-import { CampPins, CapitalPins, IronDomeOverlay } from './MapOverlays';
+import { CampPins, CapitalPins, HomeRadar, IronDomeOverlay } from './MapOverlays';
 import { BattleLayer } from './BattleLayer';
 import { BattleToasts } from './BattleToasts';
+import { MissionsCard } from './MissionsCard';
 import { AllianceChat } from './AllianceChat';
 import { Timeline } from './Timeline';
 import { EndGameScreen } from './EndGameScreen';
@@ -105,6 +106,7 @@ export function GameView({ room, me, isAdmin }: { room: RoomState; me: PlayerSta
 
   const overlays = (
     <>
+      <HomeRadar room={room} viewerUid={me.uid} />
       <IronDomeOverlay room={room} />
       <BattleLayer news={news} />
       <CampPins room={room} viewerUid={me.uid} />
@@ -153,6 +155,16 @@ export function GameView({ room, me, isAdmin }: { room: RoomState; me: PlayerSta
         <div className="mt-2"><StatBar me={me} /></div>
       </header>
 
+      {clock.phase === 'war' ? (
+        <div className="war-banner bg-bad/20 border-b border-bad/60 text-bad text-center text-xs font-bold py-1 uppercase tracking-[0.25em]">
+          ⚔️ War Phase — Day {clock.day - clock.prepDays}/{clock.warDays} · Weapons Free
+        </div>
+      ) : (
+        <div className="bg-accent/10 border-b border-border text-accent/90 text-center text-[11px] py-1 uppercase tracking-[0.25em]">
+          🛠 Preparation — Day {clock.day}/{clock.prepDays} · War in {Math.max(0, clock.prepDays - clock.day + 1)} day{clock.prepDays - clock.day === 0 ? '' : 's'}
+        </div>
+      )}
+
       <nav className="border-b border-border bg-panel">
         <div className="flex overflow-x-auto scrollbar-thin">
           {tabs.map((t) => (
@@ -178,7 +190,7 @@ export function GameView({ room, me, isAdmin }: { room: RoomState; me: PlayerSta
 
       <main className="flex-1 overflow-y-auto scrollbar-thin">
         {tab === 'map' && (
-          <div className="h-full min-h-[400px]">
+          <div className="h-full min-h-[400px] map-crt relative">
             <WorldMap
               room={room}
               viewerCountryCode={me.countryCode}
@@ -186,6 +198,7 @@ export function GameView({ room, me, isAdmin }: { room: RoomState; me: PlayerSta
               overlays={overlays}
               onCountryClick={(code) => setDetailCode(code)}
             />
+            <MissionsCard room={room} me={me} />
           </div>
         )}
         {tab === 'build' && (

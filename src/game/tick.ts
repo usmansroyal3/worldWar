@@ -50,7 +50,7 @@ export function dailyTickPatch(me: PlayerState, currentDay: number): Partial<Pla
     money,
     ironDome,
     fatigueToday: 0,
-    daily: { speechUsed: false, lastResetDay: currentDay },
+    daily: { speechUsed: false, lastResetDay: currentDay, buildsToday: 0, advancesToday: 0, missionClaimed: false },
   };
 }
 
